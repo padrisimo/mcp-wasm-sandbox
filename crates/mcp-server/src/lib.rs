@@ -268,7 +268,10 @@ mod tests {
             params: None,
         };
         let value = serde_json::to_value(&request)?;
-        assert_eq!(value, json!({"jsonrpc": "2.0", "id": null, "method": "ping"}));
+        assert_eq!(
+            value,
+            json!({"jsonrpc": "2.0", "id": null, "method": "ping"})
+        );
         let decoded: JsonRpcRequest = serde_json::from_value(value)?;
         assert_eq!(decoded.id, JsonRpcId::Null);
         Ok(())

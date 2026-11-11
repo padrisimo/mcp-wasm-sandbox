@@ -107,7 +107,10 @@ mod tests {
         assert!(matches!(fuel, SandboxError::FuelExhausted));
 
         let memory = SandboxError::MemoryLimit { limit_bytes: 4096 };
-        assert!(matches!(memory, SandboxError::MemoryLimit { limit_bytes: 4096 }));
+        assert!(matches!(
+            memory,
+            SandboxError::MemoryLimit { limit_bytes: 4096 }
+        ));
 
         let io = SandboxError::from(std::io::Error::other("boom"));
         assert!(matches!(&io, SandboxError::Io(_)));
