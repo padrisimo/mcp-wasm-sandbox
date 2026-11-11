@@ -1,0 +1,25 @@
+{
+  "projectId": "opencode-superpowers",
+  "installerVersion": 1,
+  "packageVersion": "0.4.0",
+  "installMode": "copy",
+  "source": "/private/var/folders/wh/wpx352j16b3__nh78bkrxlxw0000gn/T/opencode/spx/package",
+  "installedAt": "2026-10-09T08:37:42.615Z",
+  "lockSha256": "5d92e4109300015b838040401a070db2c1b3dbe8ffde8557c9a8fbcef8a07cae",
+  "upstreamCommit": "6efe32c9e2dd002d0c394e861e0529675d1ab32e",
+  "installedAgents": [
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/agents/superpowers.md",
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/agents/superpowers-implementer.md",
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/agents/superpowers-plan-writer.md",
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/agents/superpowers-code-reviewer.md",
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/agents/superpowers-spec-writer.md"
+  ],
+  "installedSkills": [
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/skills/superpowers-using-superpowers",
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/skills/superpowers-executing-plans",
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/skills/superpowers-brainstorming",
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/skills/superpowers-writing-plans",
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/skills/superpowers-verification-before-completion",
+    "/Users/adrian/Documents/Projects/rag-minimal/.opencode/skills/superpowers-subagent-driven-development"
+  ]
+}
