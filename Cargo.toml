@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "crates/sandbox-core",
     "crates/mcp-server",
-    "crates/python-bindings",
 ]
 
 [workspace.package]
