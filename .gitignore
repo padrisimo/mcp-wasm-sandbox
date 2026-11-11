@@ -1,25 +1,24 @@
-# Python-generated files
+# Rust
+/target/
+
+# Python
 __pycache__/
 *.py[oc]
+*.egg-info/
 build/
 dist/
 wheels/
-*.egg-info
-target
-.opencode/
-.claude/
-*.pyc
+.venv/
 
-# Virtual environments
-.venv
-
-# Environment variables
-.env
-# JS dependencies
+# Node
 node_modules/
 
-/target
+# Environment
+.env
+
+# Editors and agent tooling
 .opencode/
 .claude/
-*.pyc
+
+# Superpowers generated docs
 docs/superpowers/
