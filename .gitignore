@@ -5,6 +5,10 @@ build/
 dist/
 wheels/
 *.egg-info
+target
+.opencode/
+.claude/
+*.pyc
 
 # Virtual environments
 .venv
@@ -13,3 +17,9 @@ wheels/
 .env
 # JS dependencies
 node_modules/
+
+/target
+.opencode/
+.claude/
+*.pyc
+docs/superpowers/
