@@ -384,7 +384,8 @@ mod tests {
         )
         .as_bytes();
 
-        serve(input, &mut output, crate::Dispatcher).await?;
+        let sandbox = sandbox_core::Sandbox::new(sandbox_core::SandboxConfig::default())?;
+        serve(input, &mut output, crate::Dispatcher::new(sandbox)).await?;
 
         let values = response_values(&output)?;
         assert_eq!(values.len(), 1);
