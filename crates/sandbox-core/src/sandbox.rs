@@ -118,6 +118,27 @@ impl Sandbox {
         .await
         .map_err(|err| SandboxError::Execution(format!("wasm task failed: {err}")))?
     }
+
+    /// Runs an exported function with `i32` arguments and returns its `i32` results.
+    pub async fn call_i32(
+        &self,
+        wasm: &[u8],
+        export: &str,
+        args: &[i32],
+    ) -> Result<Vec<i32>, SandboxError> {
+        let params: Vec<Val> = args.iter().copied().map(Val::I32).collect();
+        let results = self.call(wasm, export, &params).await?;
+
+        results
+            .iter()
+            .map(|value| match value {
+                Val::I32(value) => Ok(*value),
+                other => Err(SandboxError::Execution(format!(
+                    "unexpected result type: {other:?}"
+                ))),
+            })
+            .collect()
+    }
 }
 
 fn execute(
