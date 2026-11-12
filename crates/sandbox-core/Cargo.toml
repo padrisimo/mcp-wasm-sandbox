@@ -8,3 +8,10 @@ wasmtime.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tokio = { workspace = true, features = ["rt"] }
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "execution"
+harness = false

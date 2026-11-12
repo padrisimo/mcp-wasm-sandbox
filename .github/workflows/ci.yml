@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The Python bindings are built as an extension module, so they cannot be
+      # linked into a test binary on Linux. They are tested in the python job.
+      - name: Test
+        run: cargo test --workspace --exclude mcp-wasm-sandbox
+
+      - name: Benchmarks compile
+        run: cargo bench --workspace --exclude mcp-wasm-sandbox --no-run
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v5
+        id: setup-python
+        with:
+          python-version: "3.12"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: maturin
+
+      # Without the extension-module feature the crate links against libpython,
+      # so the interpreter-backed tests can run.
+      - name: Test the bindings
+        env:
+          PYO3_PYTHON: ${{ steps.setup-python.outputs.python-path }}
+        run: cargo test -p mcp-wasm-sandbox --no-default-features
+
+      - name: Test the GIL release
+        env:
+          PYO3_PYTHON: ${{ steps.setup-python.outputs.python-path }}
+        run: cargo test -p mcp-wasm-sandbox --no-default-features -- --ignored
+
+      - name: Build the wheel
+        working-directory: crates/python-bindings
+        run: maturin build --release --out dist
+
+      - name: Import the wheel
+        working-directory: crates/python-bindings
+        run: |
+          pip install dist/*.whl
+          python -c "import mcp_wasm_sandbox; print(mcp_wasm_sandbox.WasmSandbox(1024, 1000))"

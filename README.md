@@ -10,7 +10,7 @@ Wasmtime sandbox with a hard fuel budget and a hard linear-memory ceiling.
 | 1 | JSON-RPC 2.0 wire types, stdio transport, dispatcher | done |
 | 2 | Isolation runtime: fuel metering, memory ceiling, module cache | done |
 | 3 | Python bindings (`mcp_wasm_sandbox`) | done |
-| 4 | Benchmarks and CI | pending |
+| 4 | Benchmarks and CI | in progress: benchmarks and CI done, sub-process and container baselines missing |
 
 Everything below is verified by the test suite and by the commands shown here.
 Nothing is published to PyPI yet; the wheel is built from this repository.
@@ -78,6 +78,21 @@ a shared `libpython`:
 ```sh
 PYO3_PYTHON=$(uv python find 3.12) cargo test -p mcp-wasm-sandbox --no-default-features -- --ignored
 ```
+
+## Performance
+
+`cargo bench -p sandbox-core` measures the hot paths. Criterion writes the full
+distributions, p50, p95 and p99 included, under `target/criterion`.
+
+| Benchmark | Median | What it measures |
+| --- | --- | --- |
+| `compile_module` | ~105 µs | cold path, the module is compiled from WAT every time |
+| `instantiate` | ~1.3 µs | store plus instantiation of an already compiled module |
+| `cached_call` | ~6.5 µs | the full public API, offloaded to a blocking thread |
+
+Measured on an Apple Silicon laptop. A cached execution is far below the 1 ms
+target of the architecture. The comparison against sub-process and container
+baselines is still missing.
 
 ## Known limitations
 
