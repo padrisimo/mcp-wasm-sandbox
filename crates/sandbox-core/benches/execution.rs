@@ -1,7 +1,11 @@
-//! Latency benchmarks for the sandbox hot paths.
+//! Latency benchmarks for the sandbox hot paths and the sub-process baseline.
 //!
 //! Run them with `cargo bench -p sandbox-core`. Criterion writes the full
 //! distributions, including p50, p95 and p99, under `target/criterion`.
+
+use std::io::Write;
+use std::path::Path;
+use std::process::{Command, Stdio};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use sandbox_core::{Sandbox, SandboxConfig};
@@ -59,5 +63,60 @@ fn bench_cached_call(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_compile, bench_instantiate, bench_cached_call);
+/// Baseline: the floor of any sub-process approach, spawning a trivial process.
+fn bench_subprocess_spawn(c: &mut Criterion) {
+    c.bench_function("subprocess_spawn_floor", |b| {
+        b.iter(|| Command::new("/bin/true").status().ok());
+    });
+}
+
+/// Baseline: one execution behind a process boundary, through the MCP server.
+fn bench_subprocess_round_trip(c: &mut Criterion) {
+    let binary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/release/mcp-server");
+    if !binary.exists() {
+        eprintln!(
+            "skipping the sub-process baseline: build it with `cargo build --release -p mcp-server`"
+        );
+        return;
+    }
+
+    let request = format!(
+        "{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{{\"name\":\"run_wasm\",\
+         \"arguments\":{{\"source\":\"{ADD_MODULE}\",\"export\":\"add\",\"args\":[2,3]}}}}}}\n"
+    );
+
+    c.bench_function("subprocess_round_trip", |b| {
+        b.iter(|| {
+            let mut child = match Command::new(&binary)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+            {
+                Ok(child) => child,
+                Err(err) => {
+                    eprintln!("cannot spawn the server: {err}");
+                    return None;
+                }
+            };
+
+            if let Some(stdin) = child.stdin.as_mut()
+                && let Err(err) = stdin.write_all(request.as_bytes())
+            {
+                eprintln!("cannot write the request: {err}");
+            }
+            drop(child.stdin.take());
+
+            child.wait_with_output().ok().map(|out| out.stdout.len())
+        });
+    });
+}
+
+criterion_group!(
+    benches,
+    bench_compile,
+    bench_instantiate,
+    bench_cached_call,
+    bench_subprocess_spawn,
+    bench_subprocess_round_trip
+);
 criterion_main!(benches);

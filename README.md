@@ -86,13 +86,18 @@ distributions, p50, p95 and p99 included, under `target/criterion`.
 
 | Benchmark | Median | What it measures |
 | --- | --- | --- |
-| `compile_module` | ~105 µs | cold path, the module is compiled from WAT every time |
+| `compile_module` | ~98 µs | cold path, the module is compiled from WAT every time |
 | `instantiate` | ~1.3 µs | store plus instantiation of an already compiled module |
-| `cached_call` | ~6.5 µs | the full public API, offloaded to a blocking thread |
+| `cached_call` | ~6.6 µs | the full public API, offloaded to a blocking thread |
+| `subprocess_spawn_floor` | ~29 µs | baseline: spawning a trivial process |
+| `subprocess_round_trip` | ~2.5 ms | baseline: one execution behind a process boundary, through the MCP server |
 
-Measured on an Apple Silicon laptop. A cached execution is far below the 1 ms
-target of the architecture. The comparison against sub-process and container
-baselines is still missing.
+Measured on an Apple Silicon laptop. A cached execution is roughly 375 times
+faster than the same work behind a sub-process, and two orders of magnitude
+below the 1 ms target of the architecture.
+
+The container baseline is still missing: it needs a Docker daemon and a
+WebAssembly-capable image, so it is not reproducible in every environment.
 
 ## Known limitations
 

@@ -38,6 +38,6 @@ The project uses a Cargo Workspace to split concerns cleanly (YAGNI enforcement)
 * Setup local `Maturin` dev builds (wheel built with `maturin build --release`).
 
 ### Phase 4: Benchmarking & CI/CD Pipeline [CURRENT]
-* Author a performance testing suite using `criterion` (`cargo bench -p sandbox-core`: compile ~105 µs, instantiate ~1.3 µs, cached call ~6.5 µs).
-* Graph p50/p95/p99 latency footprints vs sub-processes and containers. [PENDING: the baselines do not exist yet]
+* Author a performance testing suite using `criterion` (`cargo bench -p sandbox-core`: compile ~98 µs, instantiate ~1.3 µs, cached call ~6.6 µs).
+* Graph p50/p95/p99 latency footprints vs sub-processes and containers. [PARTIAL: sub-process baseline ~2.5 ms per round trip and ~29 µs just to spawn a process; the container baseline needs a Docker daemon.]
 * Configure automated GitHub workflows for workspace linting (`clippy`) and testing (`.github/workflows/ci.yml`).
