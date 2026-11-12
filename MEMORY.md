@@ -26,13 +26,13 @@ The project uses a Cargo Workspace to split concerns cleanly (YAGNI enforcement)
 * Model base MCP lifecycle messages (`initialize`, `tools/list`, `tools/call`) using serde derives.
 * Implement asynchronous stream transport over standard input/output, with a minimal dispatcher and the `mcp-server` binary.
 
-### Phase 2: Isolation Runtime [CURRENT]
-* Initialize Wasmtime global configuration engine.
-* Design a pre-compiled `.wasm` module cache structure.
-* Configure explicit memory caps and fuel restrictions.
-* Validate thread offloading patterns with mock heavy computation modules.
+### Phase 2: Isolation Runtime [DONE]
+* Initialize Wasmtime global configuration engine (`consume_fuel`, threads disabled).
+* Design a pre-compiled `.wasm` module cache structure (in-memory `ModuleCache`, keyed by module bytes).
+* Configure explicit memory caps and fuel restrictions (32 MiB ceiling, 10M fuel, hard `ResourceLimiter` denial).
+* Validate thread offloading patterns with mock heavy computation modules (`spawn_blocking`, runtime stays responsive).
 
-### Phase 3: Python Integration & Wheel Building [PENDING]
+### Phase 3: Python Integration & Wheel Building [CURRENT]
 * Create `WasmSandbox` PyO3 bindings.
 * Test safe GIL releasing procedures.
 * Setup local `Maturin` dev builds.
