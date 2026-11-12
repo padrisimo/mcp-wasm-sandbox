@@ -3,12 +3,15 @@
 //! The JSON-RPC constants and envelope types, the `initialize`, `tools/list`,
 //! and `tools/call` payloads, and the bridge from [`sandbox_core::SandboxError`]
 //! to [`JsonRpcError`] come from Phase 1. Phase 1b adds [`McpWireError`] and
-//! the newline-delimited transport ([`serve`] and [`serve_stdio`]); request
-//! dispatch and MCP method routing arrive later.
+//! the newline-delimited transport ([`serve`] and [`serve_stdio`]). Phase 1c
+//! adds the [`Dispatcher`] and the `mcp-server` binary; tool execution arrives
+//! with the Wasm runtime.
 
+mod dispatcher;
 mod error;
 mod transport;
 
+pub use dispatcher::Dispatcher;
 pub use error::McpWireError;
 pub use transport::{RequestHandler, serve, serve_stdio};
 

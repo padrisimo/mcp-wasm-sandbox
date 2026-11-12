@@ -372,4 +372,28 @@ mod tests {
         assert!(output.is_empty());
         Ok(())
     }
+
+    #[tokio::test]
+    async fn serve_with_dispatcher_answers_initialize() -> Result<(), Box<dyn std::error::Error>> {
+        let mut output = Vec::new();
+        let input = concat!(
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"#,
+            r#""protocolVersion":"2024-11-05","capabilities":{},"#,
+            r#""clientInfo":{"name":"test","version":"1.0"}}}"#,
+            "\n"
+        )
+        .as_bytes();
+
+        serve(input, &mut output, crate::Dispatcher).await?;
+
+        let values = response_values(&output)?;
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0]["id"], json!(1));
+        assert_eq!(values[0]["result"]["protocolVersion"], json!("2024-11-05"));
+        assert_eq!(
+            values[0]["result"]["serverInfo"]["name"],
+            json!("mcp-server")
+        );
+        Ok(())
+    }
 }
