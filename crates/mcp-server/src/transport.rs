@@ -2,13 +2,16 @@
 
 use std::future::Future;
 
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::error::McpWireError;
 use crate::{
     INVALID_REQUEST, JSONRPC_VERSION, JsonRpcError, JsonRpcId, JsonRpcNotification, JsonRpcRequest,
     JsonRpcResponse, PARSE_ERROR,
 };
+
+/// Maximum accepted length of a single NDJSON line, in bytes.
+const MAX_LINE_BYTES: usize = 1024 * 1024;
 
 /// Handles one JSON-RPC request and returns the response to write.
 pub trait RequestHandler {
@@ -23,14 +26,35 @@ where
     W: AsyncWrite + Unpin,
     H: RequestHandler,
 {
-    let mut lines = BufReader::new(reader).lines();
+    let mut reader = BufReader::new(reader);
 
-    while let Some(line) = lines.next_line().await? {
-        if line.trim().is_empty() {
+    loop {
+        let line = match read_line(&mut reader).await? {
+            IncomingLine::Eof => break,
+            IncomingLine::TooLong => {
+                write_response(
+                    &mut writer,
+                    error_response(INVALID_REQUEST, "request too large"),
+                )
+                .await?;
+                continue;
+            }
+            IncomingLine::Line(bytes) => bytes,
+        };
+
+        let line = match std::str::from_utf8(&line) {
+            Ok(text) => text.trim(),
+            Err(_) => {
+                write_response(&mut writer, error_response(PARSE_ERROR, "invalid JSON")).await?;
+                continue;
+            }
+        };
+
+        if line.is_empty() {
             continue;
         }
 
-        let value: serde_json::Value = match serde_json::from_str(&line) {
+        let value: serde_json::Value = match serde_json::from_str(line) {
             Ok(value) => value,
             Err(_) => {
                 write_response(&mut writer, error_response(PARSE_ERROR, "invalid JSON")).await?;
@@ -61,9 +85,9 @@ where
             };
             let response = handler.handle(request).await;
             write_response(&mut writer, response).await?;
-        } else {
-            // Notifications are never answered; invalid ones are dropped silently.
-            let _ = serde_json::from_value::<JsonRpcNotification>(value);
+        } else if let Err(err) = serde_json::from_value::<JsonRpcNotification>(value) {
+            // Notifications are never answered; malformed ones are dropped with a warning.
+            tracing::warn!(%err, "dropping invalid notification");
         }
     }
 
@@ -96,6 +120,60 @@ async fn write_response<W: AsyncWrite + Unpin>(
     writer.write_all(&line).await?;
     writer.flush().await?;
     Ok(())
+}
+
+/// One line read from the input stream.
+enum IncomingLine {
+    /// The stream ended with no pending data.
+    Eof,
+    /// A complete line, including its trailing newline.
+    Line(Vec<u8>),
+    /// A line above [`MAX_LINE_BYTES`], already discarded.
+    TooLong,
+}
+
+/// Reads one newline-terminated line, discarding anything above the size cap.
+async fn read_line<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+) -> Result<IncomingLine, std::io::Error> {
+    let mut line: Vec<u8> = Vec::new();
+    let mut too_long = false;
+
+    loop {
+        let available = reader.fill_buf().await?;
+        if available.is_empty() {
+            return Ok(if too_long {
+                IncomingLine::TooLong
+            } else if line.is_empty() {
+                IncomingLine::Eof
+            } else {
+                IncomingLine::Line(line)
+            });
+        }
+
+        let newline = available.iter().position(|&byte| byte == b'\n');
+        let take = newline.map_or(available.len(), |position| position + 1);
+
+        if !too_long {
+            if line.len() + take > MAX_LINE_BYTES {
+                too_long = true;
+                line.clear();
+            } else {
+                line.extend_from_slice(&available[..take]);
+            }
+        }
+
+        let complete = newline.is_some();
+        reader.consume(take);
+
+        if complete {
+            return Ok(if too_long {
+                IncomingLine::TooLong
+            } else {
+                IncomingLine::Line(line)
+            });
+        }
+    }
 }
 
 #[cfg(test)]
@@ -238,6 +316,57 @@ mod tests {
         let mut output = Vec::new();
 
         serve(input, &mut output, handler).await?;
+
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn invalid_utf8_gets_parse_error() -> Result<(), Box<dyn std::error::Error>> {
+        let (handler, calls) = counting_handler();
+        let mut output = Vec::new();
+        let input: &[u8] = b"\xff\n";
+
+        serve(input, &mut output, handler).await?;
+
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        let values = response_values(&output)?;
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0]["jsonrpc"], json!("2.0"));
+        assert_eq!(values[0]["id"], json!(null));
+        assert_eq!(values[0]["error"]["code"], json!(PARSE_ERROR));
+        assert_eq!(values[0]["error"]["message"], json!("invalid JSON"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn oversized_line_gets_invalid_request() -> Result<(), Box<dyn std::error::Error>> {
+        let (handler, calls) = counting_handler();
+        let mut output = Vec::new();
+        let mut input = vec![b'a'; MAX_LINE_BYTES + 1];
+        input.push(b'\n');
+        input.extend_from_slice(b"{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"ping\"}\n");
+
+        serve(input.as_slice(), &mut output, handler).await?;
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let values = response_values(&output)?;
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0]["id"], json!(null));
+        assert_eq!(values[0]["error"]["code"], json!(INVALID_REQUEST));
+        assert_eq!(values[0]["error"]["message"], json!("request too large"));
+        assert_eq!(values[1]["id"], json!(9));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn invalid_notification_is_dropped() -> Result<(), Box<dyn std::error::Error>> {
+        let (handler, calls) = counting_handler();
+        let mut output = Vec::new();
+        let input = b"{\"jsonrpc\":\"2.0\",\"method\":42}\n";
+
+        serve(input.as_slice(), &mut output, handler).await?;
 
         assert_eq!(calls.load(Ordering::SeqCst), 0);
         assert!(output.is_empty());
