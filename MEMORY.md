@@ -20,13 +20,13 @@ The project uses a Cargo Workspace to split concerns cleanly (YAGNI enforcement)
 
 ## 4. Current State & Incremental Roadmap
 
-### Phase 1: Core Definitions & Protocol Wire [CURRENT]
+### Phase 1: Core Definitions & Protocol Wire [DONE]
 * Setup workspace architecture, global dependencies (`Cargo.toml`), and local crate wiring.
-* Define `thiserror` domain models for sandbox anomalies.
-* Model base MCP lifecycle messages (`initialize`, `tools/list`, `tools/call`) using zero-copy serde traits.
-* Implement asynchronous stream transport over standard input/output.
+* Define `thiserror` domain models for sandbox anomalies (`SandboxError`, `McpWireError`).
+* Model base MCP lifecycle messages (`initialize`, `tools/list`, `tools/call`) using serde derives.
+* Implement asynchronous stream transport over standard input/output, with a minimal dispatcher and the `mcp-server` binary.
 
-### Phase 2: Isolation Runtime [PENDING]
+### Phase 2: Isolation Runtime [CURRENT]
 * Initialize Wasmtime global configuration engine.
 * Design a pre-compiled `.wasm` module cache structure.
 * Configure explicit memory caps and fuel restrictions.

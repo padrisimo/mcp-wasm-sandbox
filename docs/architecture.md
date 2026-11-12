@@ -37,7 +37,7 @@ The system is architected as a decoupled Cargo Workspace to guarantee strict sep
 Every dynamic execution request undergoes multi-layered restriction inside `crates/sandbox-core`:
 
 1. **Pre-compiled Module Cache**: Guest `.wasm` binaries are compiled into native `Precompiled` modules once and cached in an in-memory `DashMap`. Instantiations fetch from cache, achieving sub-millisecond cold starts.
-2. **Deterministic Fuel Metering**: To counter malicious infinite loops (`loop {}`), `wasmtime::Store::set_fuel` is injected into every execution. If an agent's tool runs out of the allocated fuel allocation, the engine immediately traps, terminates the execution, and returns a controlled `McpError`.
+2. **Deterministic Fuel Metering**: To counter malicious infinite loops (`loop {}`), `wasmtime::Store::set_fuel` is injected into every execution. If an agent's tool runs out of the allocated fuel allocation, the engine immediately traps, terminates the execution, and returns a controlled `McpWireError`.
 3. **Linear Memory Ceilings**: A custom `wasmtime::ResourceLimiter` is tied to each store context. It intercepts allocations dynamically, ensuring no runtime script can trigger a Host Out-Of-Memory (OOM) attack by exceeding the hard-coded RAM envelope (e.g., max 32MB per sandbox).
 4. **Least-Privilege System Access (WASI)**: By default, the `wasmtime_wasi::WasiCtx` is stripped bare. No environment variables, no arbitrary filesystem access, and no raw socket creation are inherited from the host environment unless explicitly white-listed by tool definitions.
 
