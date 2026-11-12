@@ -32,12 +32,12 @@ The project uses a Cargo Workspace to split concerns cleanly (YAGNI enforcement)
 * Configure explicit memory caps and fuel restrictions (32 MiB ceiling, 10M fuel, hard `ResourceLimiter` denial).
 * Validate thread offloading patterns with mock heavy computation modules (`spawn_blocking`, runtime stays responsive).
 
-### Phase 3: Python Integration & Wheel Building [CURRENT]
-* Create `WasmSandbox` PyO3 bindings.
-* Test safe GIL releasing procedures.
-* Setup local `Maturin` dev builds.
+### Phase 3: Python Integration & Wheel Building [DONE]
+* Create `WasmSandbox` PyO3 bindings (`crates/python-bindings`, module `mcp_wasm_sandbox`).
+* Test safe GIL releasing procedures (`py.detach` around the sandbox run).
+* Setup local `Maturin` dev builds (wheel built with `maturin build --release`).
 
-### Phase 4: Benchmarking & CI/CD Pipeline [PENDING]
+### Phase 4: Benchmarking & CI/CD Pipeline [CURRENT]
 * Author a performance testing suite using `criterion`.
 * Graph p50/p95/p99 latency footprints vs sub-processes and containers.
 * Configure automated GitHub workflows for workspace linting (`clippy`) and testing.

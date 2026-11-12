@@ -1,0 +1,20 @@
+[package]
+name = "mcp-wasm-sandbox"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "mcp_wasm_sandbox"
+# "lib" keeps the unit-test target alive; "cdylib" is what maturin loads.
+crate-type = ["cdylib", "lib"]
+
+[features]
+default = ["extension-module"]
+# Off when the crate is linked against libpython, for instance to run the
+# interpreter-backed tests.
+extension-module = ["pyo3/extension-module"]
+
+[dependencies]
+pyo3 = { workspace = true }
+sandbox-core = { path = "../sandbox-core" }
+tokio = { workspace = true, features = ["rt"] }

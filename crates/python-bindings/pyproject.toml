@@ -4,8 +4,13 @@ build-backend = "maturin"
 
 [project]
 name = "mcp-wasm-sandbox"
+version = "0.1.0"
 requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
 ]
+
+[tool.maturin]
+module-name = "mcp_wasm_sandbox"
+features = ["extension-module"]
