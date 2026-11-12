@@ -1,8 +1,14 @@
 //! Core execution engine for the MCP WebAssembly sandbox.
 //!
 //! Phase 1 defines [`SandboxError`], the domain error type shared by the
-//! workspace. Engine configuration, the module cache, and Wasmtime execution
-//! arrive in a later phase.
+//! workspace. Phase 2 adds the isolation runtime: a shared Wasmtime engine, an
+//! in-memory module cache, and execution under a fuel and memory budget.
+
+mod cache;
+mod sandbox;
+
+pub use cache::ModuleCache;
+pub use sandbox::{DEFAULT_FUEL, DEFAULT_MAX_MEMORY_BYTES, Sandbox, SandboxConfig};
 
 /// Domain errors raised by the Wasm sandbox.
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +43,9 @@ pub enum SandboxError {
     /// The operation is not supported by this sandbox.
     #[error("unsupported operation: {0}")]
     Unsupported(String),
+    /// The WebAssembly engine could not be created.
+    #[error("wasm engine error: {0}")]
+    Engine(String),
 }
 
 #[cfg(test)]
@@ -115,6 +124,13 @@ mod tests {
         let io = SandboxError::from(std::io::Error::other("boom"));
         assert!(matches!(&io, SandboxError::Io(_)));
 
+        Ok(())
+    }
+
+    #[test]
+    fn engine_error_display() -> Result<(), Box<dyn std::error::Error>> {
+        let err = SandboxError::Engine("boom".to_string());
+        assert_eq!(err.to_string(), "wasm engine error: boom");
         Ok(())
     }
 }
