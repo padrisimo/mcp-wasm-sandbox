@@ -71,6 +71,9 @@ binary (`module_base64`, base64 encoded), which is what agents usually produce:
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run_wasm","arguments":{"module_base64":"AGFzbQEAAAABBwFgAn9/AX8DAgEABwcBA2FkZAAACgkBBwAgACABags=","export":"add","args":[2,3]}}}
 ```
 
+The `args` are numbers: the sandbox adapts them to the signature of the
+exported function, so a module that takes an `i64` works with the same call.
+
 ### Container image
 
 ```sh
@@ -127,8 +130,8 @@ below the 1 ms target of the architecture.
 - WASI `preview1` is available, but locked down: no preopened directories, no
   environment variables, no arguments and no inherited streams. Everything the
   guest writes to stdout or stderr comes back in the tool result.
-- The tool arguments are integers only; floats and 64 bit integers are not
-  exposed yet.
+- The tool arguments are numbers; the guest decides their type, since the
+  sandbox adapts them to the signature of the exported function.
 - The module cache grows without bound and is not shared between processes.
 - One request is handled at a time; there is no pipelining.
 

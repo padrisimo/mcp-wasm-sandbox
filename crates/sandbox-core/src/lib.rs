@@ -9,7 +9,9 @@ mod sandbox;
 mod wasi;
 
 pub use cache::ModuleCache;
-pub use sandbox::{DEFAULT_FUEL, DEFAULT_MAX_MEMORY_BYTES, Sandbox, SandboxConfig, SandboxOutput};
+pub use sandbox::{
+    DEFAULT_FUEL, DEFAULT_MAX_MEMORY_BYTES, Number, Sandbox, SandboxConfig, SandboxOutput,
+};
 
 /// Domain errors raised by the Wasm sandbox.
 #[derive(Debug, thiserror::Error)]

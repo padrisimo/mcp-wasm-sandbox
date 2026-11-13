@@ -1,7 +1,7 @@
 //! Minimal MCP method routing for the stdio server.
 
 use base64::Engine;
-use sandbox_core::Sandbox;
+use sandbox_core::{Number, Sandbox};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -51,6 +51,7 @@ impl RequestHandler for Dispatcher {
                 _ => error(id, INVALID_PARAMS, "invalid initialize params"),
             },
             "tools/list" => success(id, ToolsListResult { tools: tools() }),
+            "ping" => success(id, serde_json::json!({})),
             "tools/call" => match params.map(serde_json::from_value::<ToolsCallParams>) {
                 Some(Ok(params)) => match self.run_tool(&params).await {
                     Ok(result) => success(id, result),
@@ -77,10 +78,11 @@ impl Dispatcher {
         let parsed: RunWasmArgs = serde_json::from_value(arguments.clone())
             .map_err(|_| INVALID_RUN_WASM_ARGS.to_string())?;
         let module = parsed.module()?;
+        let numbers = parsed.numbers()?;
 
         match self
             .sandbox
-            .call_i32_with_output(&module, &parsed.export, &parsed.args)
+            .call_with_output(&module, &parsed.export, &numbers)
             .await
         {
             Ok(output) => {
@@ -119,9 +121,9 @@ struct RunWasmArgs {
     module_base64: Option<String>,
     /// Name of the exported function to call.
     export: String,
-    /// Integer arguments for the exported function.
+    /// Numeric arguments for the exported function.
     #[serde(default)]
-    args: Vec<i32>,
+    args: Vec<serde_json::Value>,
 }
 
 impl RunWasmArgs {
@@ -137,6 +139,27 @@ impl RunWasmArgs {
             Some(source) => Ok(source.as_bytes().to_vec()),
             None => Err(INVALID_RUN_WASM_ARGS.to_string()),
         }
+    }
+
+    /// The arguments, as sandbox numbers.
+    fn numbers(&self) -> Result<Vec<Number>, String> {
+        self.args.iter().map(parse_number).collect()
+    }
+}
+
+/// Reads a JSON number as a sandbox number.
+fn parse_number(value: &serde_json::Value) -> Result<Number, String> {
+    match value {
+        serde_json::Value::Number(number) => {
+            if let Some(value) = number.as_i64() {
+                Ok(Number::I64(value))
+            } else if let Some(value) = number.as_f64() {
+                Ok(Number::F64(value))
+            } else {
+                Err(format!("unsupported number: {number}"))
+            }
+        }
+        other => Err(format!("arguments must be numbers, got {other}")),
     }
 }
 
@@ -165,8 +188,8 @@ fn tools() -> Vec<Tool> {
                 },
                 "args": {
                     "type": "array",
-                    "items": {"type": "integer"},
-                    "description": "Integer arguments for the exported function."
+                    "items": {"type": "number"},
+                    "description": "Numeric arguments for the exported function."
                 }
             },
             "required": ["export"],
@@ -175,10 +198,10 @@ fn tools() -> Vec<Tool> {
     }]
 }
 
-fn format_values(values: &[i32]) -> String {
+fn format_values(values: &[Number]) -> String {
     values
         .iter()
-        .map(|value| value.to_string())
+        .map(|value| value.to_text())
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -234,6 +257,12 @@ mod tests {
             (i32.store (i32.const 0) (i32.const 100))
             (i32.store (i32.const 4) (i32.const 6))
             (drop (call $fd_write (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 20)))))"#;
+
+    const I64_MODULE: &str = r#"(module
+        (func (export "double") (param i64) (result i64)
+            local.get 0
+            i64.const 2
+            i64.mul))"#;
 
     fn request(id: i64, method: &str, params: Option<serde_json::Value>) -> JsonRpcRequest {
         JsonRpcRequest {
@@ -393,6 +422,41 @@ mod tests {
             .await;
 
         assert_error(response, 8, INVALID_PARAMS, "invalid run_wasm arguments")
+    }
+
+    #[tokio::test]
+    async fn run_wasm_adapts_the_arguments_to_the_signature()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut dispatcher = dispatcher()?;
+        let response = dispatcher
+            .handle(request(
+                12,
+                "tools/call",
+                Some(json!({
+                    "name": "run_wasm",
+                    "arguments": {"source": I64_MODULE, "export": "double", "args": [21]}
+                })),
+            ))
+            .await;
+
+        let JsonRpcResponse::Success { result, .. } = response else {
+            return Err("expected a success response".into());
+        };
+        assert_eq!(result["content"][0]["text"], json!("42"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ping_is_answered() -> Result<(), Box<dyn std::error::Error>> {
+        let mut dispatcher = dispatcher()?;
+        let response = dispatcher.handle(request(11, "ping", None)).await;
+
+        let JsonRpcResponse::Success { id, result, .. } = response else {
+            return Err("expected a success response".into());
+        };
+        assert_eq!(id, JsonRpcId::Number(11));
+        assert_eq!(result, json!({}));
+        Ok(())
     }
 
     #[tokio::test]
