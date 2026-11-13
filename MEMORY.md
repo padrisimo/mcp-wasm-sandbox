@@ -31,6 +31,7 @@ The project uses a Cargo Workspace to split concerns cleanly (YAGNI enforcement)
 * Design a pre-compiled `.wasm` module cache structure (in-memory `ModuleCache`, keyed by module bytes, capped at 64 modules).
 * Configure explicit memory caps and fuel restrictions (32 MiB ceiling, 10M fuel, hard `ResourceLimiter` denial).
 * Validate thread offloading patterns with mock heavy computation modules (`spawn_blocking`, runtime stays responsive).
+* Provide WASI `preview1` with no host access: no preopened dirs, no env, no args, stdout and stderr captured and returned to the caller.
 
 ### Phase 3: Python Integration & Wheel Building [DONE]
 * Create `WasmSandbox` PyO3 bindings (`crates/python-bindings`, module `mcp_wasm_sandbox`).

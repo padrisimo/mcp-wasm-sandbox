@@ -22,5 +22,7 @@ pyo3 = { version = "0.30" }
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 base64 = "0.22"
 wat = "1"
+wasmtime-wasi = "25.0"
+bytes = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

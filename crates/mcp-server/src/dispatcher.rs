@@ -80,15 +80,26 @@ impl Dispatcher {
 
         match self
             .sandbox
-            .call_i32(&module, &parsed.export, &parsed.args)
+            .call_i32_with_output(&module, &parsed.export, &parsed.args)
             .await
         {
-            Ok(values) => Ok(ToolsCallResult {
-                content: vec![Content::Text {
-                    text: format_values(&values),
-                }],
-                is_error: None,
-            }),
+            Ok(output) => {
+                let mut content = Vec::new();
+                if !output.stdout.is_empty() {
+                    content.push(Content::Text {
+                        text: String::from_utf8_lossy(&output.stdout).into_owned(),
+                    });
+                }
+                if !output.results.is_empty() {
+                    content.push(Content::Text {
+                        text: format_values(&output.results),
+                    });
+                }
+                Ok(ToolsCallResult {
+                    content,
+                    is_error: None,
+                })
+            }
             Err(err) => Ok(ToolsCallResult {
                 content: vec![Content::Text {
                     text: err.to_string(),
@@ -213,6 +224,16 @@ mod tests {
             i32.add))"#;
 
     const SPIN_MODULE: &str = r#"(module (func (export "spin") (loop br 0)))"#;
+
+    const PRINT_MODULE: &str = r#"(module
+        (import "wasi_snapshot_preview1" "fd_write"
+            (func $fd_write (param i32 i32 i32 i32) (result i32)))
+        (memory (export "memory") 1)
+        (data (i32.const 100) "hello\n")
+        (func (export "print")
+            (i32.store (i32.const 0) (i32.const 100))
+            (i32.store (i32.const 4) (i32.const 6))
+            (drop (call $fd_write (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 20)))))"#;
 
     fn request(id: i64, method: &str, params: Option<serde_json::Value>) -> JsonRpcRequest {
         JsonRpcRequest {
@@ -372,6 +393,27 @@ mod tests {
             .await;
 
         assert_error(response, 8, INVALID_PARAMS, "invalid run_wasm arguments")
+    }
+
+    #[tokio::test]
+    async fn run_wasm_returns_the_guest_output() -> Result<(), Box<dyn std::error::Error>> {
+        let mut dispatcher = dispatcher()?;
+        let response = dispatcher
+            .handle(request(
+                10,
+                "tools/call",
+                Some(json!({
+                    "name": "run_wasm",
+                    "arguments": {"source": PRINT_MODULE, "export": "print"}
+                })),
+            ))
+            .await;
+
+        let JsonRpcResponse::Success { result, .. } = response else {
+            return Err("expected a success response".into());
+        };
+        assert_eq!(result["content"][0]["text"], json!("hello\n"));
+        Ok(())
     }
 
     #[tokio::test]

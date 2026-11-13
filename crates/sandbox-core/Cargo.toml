@@ -5,6 +5,8 @@ edition.workspace = true
 
 [dependencies]
 wasmtime.workspace = true
+wasmtime-wasi.workspace = true
+bytes.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tokio = { workspace = true, features = ["rt"] }

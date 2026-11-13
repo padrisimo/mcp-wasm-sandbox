@@ -124,7 +124,9 @@ below the 1 ms target of the architecture.
 
 ## Known limitations
 
-- Guest modules get no host imports at all, so WASI is not available.
+- WASI `preview1` is available, but locked down: no preopened directories, no
+  environment variables, no arguments and no inherited streams. Everything the
+  guest writes to stdout or stderr comes back in the tool result.
 - The tool arguments are integers only; floats and 64 bit integers are not
   exposed yet.
 - The module cache grows without bound and is not shared between processes.

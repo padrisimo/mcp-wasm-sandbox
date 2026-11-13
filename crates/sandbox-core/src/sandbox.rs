@@ -1,9 +1,12 @@
 //! Sandboxed WebAssembly execution under a fuel and memory budget.
 
 use wasmtime::{Engine, Linker, Module, Store, Val};
+use wasmtime_wasi::I32Exit;
+use wasmtime_wasi::preview1;
 
 use crate::SandboxError;
 use crate::cache::ModuleCache;
+use crate::wasi::WasiState;
 
 /// Default linear memory ceiling of a sandboxed module: 32 MiB.
 pub const DEFAULT_MAX_MEMORY_BYTES: usize = 32 * 1024 * 1024;
@@ -33,6 +36,14 @@ impl Default for SandboxConfig {
 struct StoreState {
     max_bytes: usize,
     denied: bool,
+    wasi: WasiState,
+}
+
+impl StoreState {
+    /// The WASI context of the guest, without any host access.
+    fn wasi_ctx(&mut self) -> &mut wasmtime_wasi::preview1::WasiP1Ctx {
+        self.wasi.ctx()
+    }
 }
 
 impl wasmtime::ResourceLimiter for StoreState {
@@ -104,19 +115,7 @@ impl Sandbox {
         export: &str,
         args: &[Val],
     ) -> Result<Vec<Val>, SandboxError> {
-        let engine = self.engine.clone();
-        let cache = self.cache.clone();
-        let config = self.config;
-        let wasm = wasm.to_vec();
-        let export = export.to_string();
-        let args = args.to_vec();
-
-        tokio::task::spawn_blocking(move || {
-            let module = cache.get_or_compile(&engine, &wasm)?;
-            execute(&engine, &module, &config, &export, &args)
-        })
-        .await
-        .map_err(|err| SandboxError::Execution(format!("wasm task failed: {err}")))?
+        Ok(self.execute(wasm, export, args).await?.0)
     }
 
     /// Runs an exported function with `i32` arguments and returns its `i32` results.
@@ -126,10 +125,20 @@ impl Sandbox {
         export: &str,
         args: &[i32],
     ) -> Result<Vec<i32>, SandboxError> {
-        let params: Vec<Val> = args.iter().copied().map(Val::I32).collect();
-        let results = self.call(wasm, export, &params).await?;
+        Ok(self.call_i32_with_output(wasm, export, args).await?.results)
+    }
 
-        results
+    /// Runs an exported function with `i32` arguments, keeping the guest output.
+    pub async fn call_i32_with_output(
+        &self,
+        wasm: &[u8],
+        export: &str,
+        args: &[i32],
+    ) -> Result<SandboxOutput, SandboxError> {
+        let params: Vec<Val> = args.iter().copied().map(Val::I32).collect();
+        let (results, stdout) = self.execute(wasm, export, &params).await?;
+
+        let results = results
             .iter()
             .map(|value| match value {
                 Val::I32(value) => Ok(*value),
@@ -137,22 +146,55 @@ impl Sandbox {
                     "unexpected result type: {other:?}"
                 ))),
             })
-            .collect()
+            .collect::<Result<Vec<i32>, SandboxError>>()?;
+
+        Ok(SandboxOutput { results, stdout })
+    }
+
+    async fn execute(
+        &self,
+        wasm: &[u8],
+        export: &str,
+        args: &[Val],
+    ) -> Result<(Vec<Val>, Vec<u8>), SandboxError> {
+        let engine = self.engine.clone();
+        let cache = self.cache.clone();
+        let config = self.config;
+        let wasm = wasm.to_vec();
+        let export = export.to_string();
+        let args = args.to_vec();
+
+        tokio::task::spawn_blocking(move || {
+            let module = cache.get_or_compile(&engine, &wasm)?;
+            run(&engine, &module, &config, &export, &args)
+        })
+        .await
+        .map_err(|err| SandboxError::Execution(format!("wasm task failed: {err}")))?
     }
 }
 
-fn execute(
+/// The outcome of a sandboxed execution.
+#[derive(Debug)]
+pub struct SandboxOutput {
+    /// Integer values returned by the exported function.
+    pub results: Vec<i32>,
+    /// Everything the guest wrote to stdout or stderr.
+    pub stdout: Vec<u8>,
+}
+
+fn run(
     engine: &Engine,
     module: &Module,
     config: &SandboxConfig,
     export: &str,
     args: &[Val],
-) -> Result<Vec<Val>, SandboxError> {
+) -> Result<(Vec<Val>, Vec<u8>), SandboxError> {
     let mut store = Store::new(
         engine,
         StoreState {
             max_bytes: config.max_memory_bytes,
             denied: false,
+            wasi: WasiState::new(),
         },
     );
     store.limiter(|state| state);
@@ -160,7 +202,10 @@ fn execute(
         .set_fuel(config.fuel)
         .map_err(|err| SandboxError::Execution(err.to_string()))?;
 
-    let linker = Linker::new(engine);
+    let mut linker = Linker::new(engine);
+    preview1::add_to_linker_sync(&mut linker, |state: &mut StoreState| state.wasi_ctx())
+        .map_err(|err| SandboxError::Execution(err.to_string()))?;
+
     let instance = linker
         .instantiate(&mut store, module)
         .map_err(|err| SandboxError::Instantiate(err.to_string()))?;
@@ -170,9 +215,20 @@ fn execute(
         .ok_or_else(|| SandboxError::Execution(format!("export not found: {export}")))?;
 
     let mut results = vec![Val::I32(0); func.ty(&store).results().len()];
-    match func.call(&mut store, args, &mut results) {
-        Ok(()) => Ok(results),
-        Err(err) => Err(classify(&store, config, err)),
+    let outcome = func.call(&mut store, args, &mut results);
+    let stdout = store.data().wasi.output().contents();
+
+    match outcome {
+        Ok(()) => Ok((results, stdout)),
+        Err(err) => {
+            // A guest that exits with code zero is not a failure.
+            if let Some(exit) = err.downcast_ref::<I32Exit>()
+                && exit.0 == 0
+            {
+                return Ok((Vec::new(), stdout));
+            }
+            Err(classify(&store, config, err))
+        }
     }
 }
 
@@ -227,6 +283,16 @@ mod tests {
             (loop
                 (local.set 0 (i32.add (local.get 0) (i32.const 1)))
                 (br_if 0 (i32.lt_u (local.get 0) (i32.const 50000000))))))"#;
+
+    const PRINT_MODULE: &str = r#"(module
+        (import "wasi_snapshot_preview1" "fd_write"
+            (func $fd_write (param i32 i32 i32 i32) (result i32)))
+        (memory (export "memory") 1)
+        (data (i32.const 100) "hello\n")
+        (func (export "print")
+            (i32.store (i32.const 0) (i32.const 100))
+            (i32.store (i32.const 4) (i32.const 6))
+            (drop (call $fd_write (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 20)))))"#;
 
     #[tokio::test]
     async fn call_add_returns_the_sum() -> Result<(), Box<dyn std::error::Error>> {
@@ -319,6 +385,18 @@ mod tests {
             done.load(Ordering::SeqCst),
             "the wasm execution blocked the async runtime"
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn guest_stdout_is_captured() -> Result<(), Box<dyn std::error::Error>> {
+        let sandbox = Sandbox::new(SandboxConfig::default())?;
+
+        let output = sandbox
+            .call_i32_with_output(PRINT_MODULE.as_bytes(), "print", &[])
+            .await?;
+
+        assert_eq!(output.stdout, b"hello\n".to_vec());
         Ok(())
     }
 
