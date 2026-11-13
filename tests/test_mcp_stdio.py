@@ -18,6 +18,9 @@ ADD_MODULE = (
     "local.get 0 local.get 1 i32.add))"
 )
 
+# The same module, compiled to a WebAssembly binary and base64 encoded.
+ADD_MODULE_BASE64 = "AGFzbQEAAAABBwFgAn9/AX8DAgEABwcBA2FkZAAACgkBBwAgACABags="
+
 
 def server_binary() -> Path:
     for candidate in CANDIDATES:
@@ -96,8 +99,30 @@ def test_tools_call_runs_the_module(server):
     assert response["result"]["content"][0]["text"] == "5"
 
 
-def test_unknown_method_is_method_not_found(server):
-    response = call(server, {"jsonrpc": "2.0", "id": 4, "method": "nope"})
+def test_tools_call_accepts_a_base64_binary_module(server):
+    response = call(
+        server,
+        {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "run_wasm",
+                "arguments": {
+                    "module_base64": ADD_MODULE_BASE64,
+                    "export": "add",
+                    "args": [2, 3],
+                },
+            },
+        },
+    )
 
     assert response["id"] == 4
+    assert response["result"]["content"][0]["text"] == "5"
+
+
+def test_unknown_method_is_method_not_found(server):
+    response = call(server, {"jsonrpc": "2.0", "id": 5, "method": "nope"})
+
+    assert response["id"] == 5
     assert response["error"]["code"] == -32601

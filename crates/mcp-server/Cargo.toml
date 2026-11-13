@@ -11,4 +11,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+base64.workspace = true
 axum = { version = "0.7", features = ["tokio"] } # Opcional para SSE en Fase 1/2
+
+[dev-dependencies]
+wat.workspace = true

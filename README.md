@@ -64,6 +64,13 @@ exposes one tool, `run_wasm`:
 
 The response is `{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"5"}]}}`.
 
+The module travels either as text (`source`, WebAssembly text format) or as a
+binary (`module_base64`, base64 encoded), which is what agents usually produce:
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run_wasm","arguments":{"module_base64":"AGFzbQEAAAABBwFgAn9/AX8DAgEABwcBA2FkZAAACgkBBwAgACABags=","export":"add","args":[2,3]}}}
+```
+
 ## Development
 
 ```sh
@@ -101,9 +108,9 @@ WebAssembly-capable image, so it is not reproducible in every environment.
 
 ## Known limitations
 
-- The `run_wasm` tool only accepts modules in the WebAssembly text format;
-  base64-encoded binaries are not supported yet.
 - Guest modules get no host imports at all, so WASI is not available.
+- The tool arguments are integers only; floats and 64 bit integers are not
+  exposed yet.
 - The module cache grows without bound and is not shared between processes.
 - One request is handled at a time; there is no pipelining.
 

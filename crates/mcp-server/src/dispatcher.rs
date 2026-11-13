@@ -1,5 +1,6 @@
 //! Minimal MCP method routing for the stdio server.
 
+use base64::Engine;
 use sandbox_core::Sandbox;
 use serde::Deserialize;
 use serde_json::json;
@@ -75,10 +76,11 @@ impl Dispatcher {
             .ok_or_else(|| INVALID_RUN_WASM_ARGS.to_string())?;
         let parsed: RunWasmArgs = serde_json::from_value(arguments.clone())
             .map_err(|_| INVALID_RUN_WASM_ARGS.to_string())?;
+        let module = parsed.module()?;
 
         match self
             .sandbox
-            .call_i32(parsed.source.as_bytes(), &parsed.export, &parsed.args)
+            .call_i32(&module, &parsed.export, &parsed.args)
             .await
         {
             Ok(values) => Ok(ToolsCallResult {
@@ -101,12 +103,30 @@ impl Dispatcher {
 #[derive(Debug, Deserialize)]
 struct RunWasmArgs {
     /// Module source in the WebAssembly text format.
-    source: String,
+    source: Option<String>,
+    /// Module binary, base64 encoded.
+    module_base64: Option<String>,
     /// Name of the exported function to call.
     export: String,
     /// Integer arguments for the exported function.
     #[serde(default)]
     args: Vec<i32>,
+}
+
+impl RunWasmArgs {
+    /// The module bytes, from the text source or from the base64 binary.
+    fn module(&self) -> Result<Vec<u8>, String> {
+        if let Some(encoded) = &self.module_base64 {
+            return base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map_err(|err| format!("invalid base64 module: {err}"));
+        }
+
+        match &self.source {
+            Some(source) => Ok(source.as_bytes().to_vec()),
+            None => Err(INVALID_RUN_WASM_ARGS.to_string()),
+        }
+    }
 }
 
 /// Tools advertised by this server.
@@ -124,6 +144,10 @@ fn tools() -> Vec<Tool> {
                     "type": "string",
                     "description": "Module source in the WebAssembly text format (WAT)."
                 },
+                "module_base64": {
+                    "type": "string",
+                    "description": "WebAssembly binary, base64 encoded."
+                },
                 "export": {
                     "type": "string",
                     "description": "Name of the exported function to call."
@@ -134,7 +158,8 @@ fn tools() -> Vec<Tool> {
                     "description": "Integer arguments for the exported function."
                 }
             },
-            "required": ["source", "export"]
+            "required": ["export"],
+            "anyOf": [{"required": ["source"]}, {"required": ["module_base64"]}]
         }),
     }]
 }
@@ -347,6 +372,32 @@ mod tests {
             .await;
 
         assert_error(response, 8, INVALID_PARAMS, "invalid run_wasm arguments")
+    }
+
+    #[tokio::test]
+    async fn run_wasm_accepts_a_base64_binary_module() -> Result<(), Box<dyn std::error::Error>> {
+        use base64::Engine;
+
+        let wasm = wat::parse_str(ADD_MODULE).map_err(std::io::Error::other)?;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&wasm);
+
+        let mut dispatcher = dispatcher()?;
+        let response = dispatcher
+            .handle(request(
+                9,
+                "tools/call",
+                Some(json!({
+                    "name": "run_wasm",
+                    "arguments": {"module_base64": encoded, "export": "add", "args": [2, 3]}
+                })),
+            ))
+            .await;
+
+        let JsonRpcResponse::Success { result, .. } = response else {
+            return Err("expected a success response".into());
+        };
+        assert_eq!(result["content"][0]["text"], json!("5"));
+        Ok(())
     }
 
     #[tokio::test]
