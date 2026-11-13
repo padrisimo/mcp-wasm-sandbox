@@ -111,12 +111,60 @@ fn bench_subprocess_round_trip(c: &mut Criterion) {
     });
 }
 
+/// Baseline: one execution inside a container, through the same MCP server.
+fn bench_container_round_trip(c: &mut Criterion) {
+    const IMAGE: &str = "mcp-wasm-sandbox:bench";
+
+    let status = Command::new("docker")
+        .args(["image", "inspect", IMAGE])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    if !matches!(status, Ok(status) if status.success()) {
+        eprintln!("skipping the container baseline: build it with `docker build -t {IMAGE} .`");
+        return;
+    }
+
+    let request = format!(
+        "{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{{\"name\":\"run_wasm\",\
+         \"arguments\":{{\"source\":\"{ADD_MODULE}\",\"export\":\"add\",\"args\":[2,3]}}}}}}\n"
+    );
+
+    c.bench_function("container_round_trip", |b| {
+        b.iter(|| {
+            let mut child = match Command::new("docker")
+                .args(["run", "--rm", "-i", IMAGE])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+            {
+                Ok(child) => child,
+                Err(err) => {
+                    eprintln!("cannot start the container: {err}");
+                    return None;
+                }
+            };
+
+            if let Some(stdin) = child.stdin.as_mut()
+                && let Err(err) = stdin.write_all(request.as_bytes())
+            {
+                eprintln!("cannot write the request: {err}");
+            }
+            drop(child.stdin.take());
+
+            child.wait_with_output().ok().map(|out| out.stdout.len())
+        });
+    });
+}
+
 criterion_group!(
     benches,
     bench_compile,
     bench_instantiate,
     bench_cached_call,
     bench_subprocess_spawn,
-    bench_subprocess_round_trip
+    bench_subprocess_round_trip,
+    bench_container_round_trip
 );
 criterion_main!(benches);
