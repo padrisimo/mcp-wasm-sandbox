@@ -28,7 +28,7 @@ The project uses a Cargo Workspace to split concerns cleanly (YAGNI enforcement)
 
 ### Phase 2: Isolation Runtime [DONE]
 * Initialize Wasmtime global configuration engine (`consume_fuel`, threads disabled).
-* Design a pre-compiled `.wasm` module cache structure (in-memory `ModuleCache`, keyed by module bytes).
+* Design a pre-compiled `.wasm` module cache structure (in-memory `ModuleCache`, keyed by module bytes, capped at 64 modules).
 * Configure explicit memory caps and fuel restrictions (32 MiB ceiling, 10M fuel, hard `ResourceLimiter` denial).
 * Validate thread offloading patterns with mock heavy computation modules (`spawn_blocking`, runtime stays responsive).
 
@@ -37,7 +37,7 @@ The project uses a Cargo Workspace to split concerns cleanly (YAGNI enforcement)
 * Test safe GIL releasing procedures (`py.detach` around the sandbox run).
 * Setup local `Maturin` dev builds (wheel built with `maturin build --release`).
 
-### Phase 4: Benchmarking & CI/CD Pipeline [CURRENT]
+### Phase 4: Benchmarking & CI/CD Pipeline [DONE]
 * Author a performance testing suite using `criterion` (`cargo bench -p sandbox-core`: compile ~98 µs, instantiate ~1.3 µs, cached call ~6.6 µs).
-* Graph p50/p95/p99 latency footprints vs sub-processes and containers. [PARTIAL: sub-process baseline ~2.5 ms per round trip and ~29 µs just to spawn a process; the container baseline needs a Docker daemon.]
-* Configure automated GitHub workflows for workspace linting (`clippy`) and testing (`.github/workflows/ci.yml`).
+* Graph p50/p95/p99 latency footprints vs sub-processes and containers (sub-process round trip ~2.5 ms, container round trip ~178 ms, both through the same MCP server).
+* Configure automated GitHub workflows for workspace linting (`clippy`) and testing (`.github/workflows/ci.yml`, green on every push).

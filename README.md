@@ -71,6 +71,16 @@ binary (`module_base64`, base64 encoded), which is what agents usually produce:
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run_wasm","arguments":{"module_base64":"AGFzbQEAAAABBwFgAn9/AX8DAgEABwcBA2FkZAAACgkBBwAgACABags=","export":"add","args":[2,3]}}}
 ```
 
+### Container image
+
+```sh
+docker build -t mcp-wasm-sandbox:bench .
+docker run --rm -i mcp-wasm-sandbox:bench
+```
+
+The image ships the release server in a minimal Debian layer, so the container
+baseline measures the same workload as the sub-process one.
+
 ## Development
 
 ```sh
@@ -98,13 +108,19 @@ distributions, p50, p95 and p99 included, under `target/criterion`.
 | `cached_call` | ~6.6 µs | the full public API, offloaded to a blocking thread |
 | `subprocess_spawn_floor` | ~29 µs | baseline: spawning a trivial process |
 | `subprocess_round_trip` | ~2.5 ms | baseline: one execution behind a process boundary, through the MCP server |
+| `container_round_trip` | ~178 ms | baseline: the same execution inside a container |
+
+The container baseline is skipped unless the image is built first
+(`docker build -t mcp-wasm-sandbox:bench .`).
+
+The same work costs 6.6 µs in process, 2.5 ms behind a sub-process and 178 ms
+inside a container: roughly 375 times and 27,000 times more expensive. A cached
+execution stays two orders of magnitude below the 1 ms target of the
+architecture.
 
 Measured on an Apple Silicon laptop. A cached execution is roughly 375 times
 faster than the same work behind a sub-process, and two orders of magnitude
 below the 1 ms target of the architecture.
-
-The container baseline is still missing: it needs a Docker daemon and a
-WebAssembly-capable image, so it is not reproducible in every environment.
 
 ## Known limitations
 
