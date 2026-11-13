@@ -68,3 +68,11 @@ jobs:
         run: |
           pip install dist/*.whl
           python -c "import mcp_wasm_sandbox; print(mcp_wasm_sandbox.WasmSandbox(1024, 1000))"
+
+      - name: Build the server
+        run: cargo build -p mcp-server
+
+      - name: End-to-end tests
+        run: |
+          pip install pytest
+          pytest tests -q
