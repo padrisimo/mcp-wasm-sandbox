@@ -7,7 +7,7 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use sandbox_core::{Sandbox, SandboxConfig};
+use sandbox_core::{DEFAULT_TIMEOUT, Sandbox, SandboxConfig};
 
 /// Sandboxed WebAssembly execution exposed to Python.
 #[pyclass(module = "mcp_wasm_sandbox")]
@@ -23,6 +23,7 @@ impl WasmSandbox {
         let sandbox = Sandbox::new(SandboxConfig {
             max_memory_bytes,
             fuel,
+            timeout: DEFAULT_TIMEOUT,
         })
         .map_err(|err| PyValueError::new_err(err.to_string()))?;
 

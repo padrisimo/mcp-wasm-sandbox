@@ -14,6 +14,9 @@ pub const DEFAULT_MAX_MEMORY_BYTES: usize = 32 * 1024 * 1024;
 /// Default fuel budget granted to a single execution.
 pub const DEFAULT_FUEL: u64 = 10_000_000;
 
+/// Default wall-clock budget of a single execution.
+pub const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Resource budget applied to every sandboxed execution.
 #[derive(Debug, Clone, Copy)]
 pub struct SandboxConfig {
@@ -21,6 +24,8 @@ pub struct SandboxConfig {
     pub max_memory_bytes: usize,
     /// Fuel budget granted to a single execution.
     pub fuel: u64,
+    /// Wall-clock budget of a single execution.
+    pub timeout: std::time::Duration,
 }
 
 impl Default for SandboxConfig {
@@ -28,6 +33,7 @@ impl Default for SandboxConfig {
         Self {
             max_memory_bytes: DEFAULT_MAX_MEMORY_BYTES,
             fuel: DEFAULT_FUEL,
+            timeout: DEFAULT_TIMEOUT,
         }
     }
 }
@@ -225,17 +231,28 @@ impl Sandbox {
         let engine = self.engine.clone();
         let cache = self.cache.clone();
         let config = self.config;
+        let timeout = config.timeout;
         let wasm = wasm.to_vec();
         let export = export.to_string();
         let args = args.to_vec();
 
-        tokio::task::spawn_blocking(move || {
-            let module = cache.get_or_compile(&engine, &wasm)?;
-            run(&engine, &module, &config, &export, &args)
-        })
+        match tokio::time::timeout(
+            timeout,
+            tokio::task::spawn_blocking(move || {
+                let module = cache.get_or_compile(&engine, &wasm)?;
+                run(&engine, &module, &config, &export, &args)
+            }),
+        )
         .await
-        .map_err(|err| SandboxError::Execution(format!("wasm task failed: {err}")))?
-        .map(|(results, stdout)| SandboxOutput { results, stdout })
+        {
+            Ok(Ok(output)) => output,
+            Ok(Err(err)) => Err(SandboxError::Execution(format!("wasm task failed: {err}"))),
+            // The blocking task cannot be cancelled once it started, so the guest
+            // keeps running until the fuel budget ends it. The timeout stops the
+            // caller from waiting, and it also bounds the compilation, which the
+            // fuel does not meter.
+            Err(_elapsed) => Err(SandboxError::Timeout { after: timeout }),
+        }
     }
 }
 
@@ -246,6 +263,8 @@ pub struct SandboxOutput {
     pub results: Vec<Number>,
     /// Everything the guest wrote to stdout or stderr.
     pub stdout: Vec<u8>,
+    /// Fuel the execution consumed.
+    pub fuel_used: u64,
 }
 
 fn run(
@@ -254,7 +273,7 @@ fn run(
     config: &SandboxConfig,
     export: &str,
     args: &[Number],
-) -> Result<(Vec<Number>, Vec<u8>), SandboxError> {
+) -> Result<SandboxOutput, SandboxError> {
     let mut store = Store::new(
         engine,
         StoreState {
@@ -301,6 +320,10 @@ fn run(
     let mut results = vec![Val::I32(0); signature.results().len()];
     let outcome = func.call(&mut store, &params, &mut results);
     let stdout = store.data().wasi.output().contents();
+    let fuel_used = match store.get_fuel() {
+        Ok(remaining) => config.fuel.saturating_sub(remaining),
+        Err(_) => config.fuel,
+    };
 
     match outcome {
         Ok(()) => {
@@ -312,14 +335,22 @@ fn run(
                     })
                 })
                 .collect::<Result<Vec<Number>, SandboxError>>()?;
-            Ok((numbers, stdout))
+            Ok(SandboxOutput {
+                results: numbers,
+                stdout,
+                fuel_used,
+            })
         }
         Err(err) => {
             // A guest that exits with code zero is not a failure.
             if let Some(exit) = err.downcast_ref::<I32Exit>()
                 && exit.0 == 0
             {
-                return Ok((Vec::new(), stdout));
+                return Ok(SandboxOutput {
+                    results: Vec::new(),
+                    stdout,
+                    fuel_used,
+                });
             }
             Err(classify(&store, config, err))
         }
@@ -354,6 +385,7 @@ fn classify(
 mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
 
     use super::{Number, Sandbox, SandboxConfig};
     use crate::SandboxError;
@@ -487,6 +519,60 @@ mod tests {
             done.load(Ordering::SeqCst),
             "the wasm execution blocked the async runtime"
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_module_that_never_returns_times_out() -> Result<(), Box<dyn std::error::Error>> {
+        let sandbox = Sandbox::new(SandboxConfig {
+            fuel: 1_000_000_000,
+            timeout: Duration::from_millis(50),
+            ..SandboxConfig::default()
+        })?;
+
+        match sandbox.call(SPIN_MODULE.as_bytes(), "spin", &[]).await {
+            Err(SandboxError::Timeout { after }) => {
+                assert_eq!(after, Duration::from_millis(50));
+                Ok(())
+            }
+            other => Err(std::io::Error::other(format!("unexpected outcome: {other:?}")).into()),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_fast_module_is_not_timed_out() -> Result<(), Box<dyn std::error::Error>> {
+        let sandbox = Sandbox::new(SandboxConfig::default())?;
+
+        let results = sandbox
+            .call(
+                ADD_MODULE.as_bytes(),
+                "add",
+                &[Number::I32(2), Number::I32(3)],
+            )
+            .await?;
+
+        assert_eq!(results, vec![Number::I32(5)]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn the_fuel_spent_is_reported() -> Result<(), Box<dyn std::error::Error>> {
+        let budget = 1_000_000;
+        let sandbox = Sandbox::new(SandboxConfig {
+            fuel: budget,
+            ..SandboxConfig::default()
+        })?;
+
+        let output = sandbox
+            .call_with_output(
+                ADD_MODULE.as_bytes(),
+                "add",
+                &[Number::I32(1), Number::I32(2)],
+            )
+            .await?;
+
+        assert!(output.fuel_used > 0, "no fuel was reported");
+        assert!(output.fuel_used <= budget, "more fuel than the budget");
         Ok(())
     }
 

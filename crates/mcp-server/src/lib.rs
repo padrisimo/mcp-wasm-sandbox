@@ -19,6 +19,9 @@ pub use http::{router, serve_http};
 pub use protocol::{Dispatched, RequestHandler, dispatch};
 pub use transport::{serve, serve_stdio};
 
+/// The MCP protocol version this server speaks.
+pub const SUPPORTED_PROTOCOL_VERSION: &str = "2024-11-05";
+
 use sandbox_core::SandboxError;
 use serde::{Deserialize, Serialize};
 

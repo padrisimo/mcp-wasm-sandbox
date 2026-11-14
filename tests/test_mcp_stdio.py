@@ -54,6 +54,25 @@ def call(server, request):
     return json.loads(line)
 
 
+def initialize(server):
+    """The lifecycle requires the handshake before any other request."""
+    response = call(
+        server,
+        {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "pytest", "version": "1.0"},
+            },
+        },
+    )
+    assert response["result"]["protocolVersion"] == "2024-11-05"
+    return response
+
+
 def test_initialize_reports_the_server_info(server):
     response = call(
         server,
@@ -75,6 +94,7 @@ def test_initialize_reports_the_server_info(server):
 
 
 def test_tools_list_advertises_run_wasm(server):
+    initialize(server)
     response = call(server, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
 
     assert response["id"] == 2
@@ -82,6 +102,7 @@ def test_tools_list_advertises_run_wasm(server):
 
 
 def test_tools_call_runs_the_module(server):
+    initialize(server)
     response = call(
         server,
         {
@@ -100,6 +121,7 @@ def test_tools_call_runs_the_module(server):
 
 
 def test_tools_call_accepts_a_base64_binary_module(server):
+    initialize(server)
     response = call(
         server,
         {
@@ -122,6 +144,7 @@ def test_tools_call_accepts_a_base64_binary_module(server):
 
 
 def test_unknown_method_is_method_not_found(server):
+    initialize(server)
     response = call(server, {"jsonrpc": "2.0", "id": 5, "method": "nope"})
 
     assert response["id"] == 5

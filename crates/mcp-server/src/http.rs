@@ -80,10 +80,12 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use sandbox_core::{Sandbox, SandboxConfig};
     use serde_json::json;
-    use tower::ServiceExt;
+    use tower::Service;
 
     use super::router;
     use crate::Dispatcher;
+
+    const INITIALIZE: &str = r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}"#;
 
     fn app() -> Result<Router, Box<dyn std::error::Error>> {
         let dispatcher = Dispatcher::new(Sandbox::new(SandboxConfig::default())?);
@@ -94,8 +96,20 @@ mod tests {
         app: Router,
         body: &str,
     ) -> Result<(StatusCode, serde_json::Value), Box<dyn std::error::Error>> {
+        let mut app = app;
+
+        // The lifecycle requires the handshake before any other request.
+        app.call(
+            Request::builder()
+                .method("POST")
+                .uri("/mcp")
+                .header("content-type", "application/json")
+                .body(Body::from(INITIALIZE))?,
+        )
+        .await?;
+
         let response = app
-            .oneshot(
+            .call(
                 Request::builder()
                     .method("POST")
                     .uri("/mcp")

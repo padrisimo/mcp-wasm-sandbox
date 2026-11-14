@@ -6,9 +6,10 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::{
-    Content, INTERNAL_ERROR, INVALID_PARAMS, Implementation, InitializeParams, InitializeResult,
-    JSONRPC_VERSION, JsonRpcError, JsonRpcId, JsonRpcRequest, JsonRpcResponse, METHOD_NOT_FOUND,
-    RequestHandler, Tool, ToolsCallParams, ToolsCallResult, ToolsListResult,
+    Content, INTERNAL_ERROR, INVALID_PARAMS, INVALID_REQUEST, Implementation, InitializeParams,
+    InitializeResult, JSONRPC_VERSION, JsonRpcError, JsonRpcId, JsonRpcRequest, JsonRpcResponse,
+    METHOD_NOT_FOUND, RequestHandler, SUPPORTED_PROTOCOL_VERSION, Tool, ToolsCallParams,
+    ToolsCallResult, ToolsListResult,
 };
 
 /// Name of the tool exposed by this server.
@@ -20,12 +21,16 @@ const INVALID_RUN_WASM_ARGS: &str = "invalid run_wasm arguments";
 /// Routes MCP lifecycle methods to their responses.
 pub struct Dispatcher {
     sandbox: Sandbox,
+    initialized: bool,
 }
 
 impl Dispatcher {
     /// Builds a dispatcher that runs guest code inside `sandbox`.
     pub fn new(sandbox: Sandbox) -> Self {
-        Self { sandbox }
+        Self {
+            sandbox,
+            initialized: false,
+        }
     }
 }
 
@@ -35,21 +40,37 @@ impl RequestHandler for Dispatcher {
             id, method, params, ..
         } = request;
 
+        // Only `initialize` and `ping` are allowed before the handshake.
+        if !self.initialized && method != "initialize" && method != "ping" {
+            return error(id, INVALID_REQUEST, "server not initialized");
+        }
+
         match method.as_str() {
-            "initialize" => match params.map(serde_json::from_value::<InitializeParams>) {
-                Some(Ok(params)) => success(
-                    id,
-                    InitializeResult {
-                        protocol_version: params.protocol_version,
-                        capabilities: json!({"tools": {}}),
-                        server_info: Implementation {
-                            name: env!("CARGO_PKG_NAME").to_string(),
-                            version: env!("CARGO_PKG_VERSION").to_string(),
-                        },
-                    },
-                ),
-                _ => error(id, INVALID_PARAMS, "invalid initialize params"),
-            },
+            "initialize" => {
+                if self.initialized {
+                    return error(id, INVALID_REQUEST, "already initialized");
+                }
+
+                match params.map(serde_json::from_value::<InitializeParams>) {
+                    Some(Ok(_params)) => {
+                        self.initialized = true;
+                        success(
+                            id,
+                            InitializeResult {
+                                // The server answers with the version it speaks, not
+                                // with the one the client asked for.
+                                protocol_version: SUPPORTED_PROTOCOL_VERSION.to_string(),
+                                capabilities: json!({"tools": {}}),
+                                server_info: Implementation {
+                                    name: env!("CARGO_PKG_NAME").to_string(),
+                                    version: env!("CARGO_PKG_VERSION").to_string(),
+                                },
+                            },
+                        )
+                    }
+                    _ => error(id, INVALID_PARAMS, "invalid initialize params"),
+                }
+            }
             "tools/list" => success(id, ToolsListResult { tools: tools() }),
             "ping" => success(id, serde_json::json!({})),
             "tools/call" => match params.map(serde_json::from_value::<ToolsCallParams>) {
@@ -236,8 +257,8 @@ mod tests {
 
     use super::Dispatcher;
     use crate::{
-        INVALID_PARAMS, JSONRPC_VERSION, JsonRpcId, JsonRpcRequest, JsonRpcResponse,
-        METHOD_NOT_FOUND, RequestHandler,
+        INVALID_PARAMS, INVALID_REQUEST, JSONRPC_VERSION, JsonRpcId, JsonRpcRequest,
+        JsonRpcResponse, METHOD_NOT_FOUND, RequestHandler, SUPPORTED_PROTOCOL_VERSION,
     };
 
     const ADD_MODULE: &str = r#"(module
@@ -275,6 +296,24 @@ mod tests {
 
     fn dispatcher() -> Result<Dispatcher, Box<dyn std::error::Error>> {
         Ok(Dispatcher::new(Sandbox::new(SandboxConfig::default())?))
+    }
+
+    /// A dispatcher that already answered `initialize`.
+    async fn initialized() -> Result<Dispatcher, Box<dyn std::error::Error>> {
+        let mut dispatcher = dispatcher()?;
+        dispatcher
+            .handle(request(
+                0,
+                "initialize",
+                Some(json!({
+                    "protocolVersion": SUPPORTED_PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1.0"}
+                })),
+            ))
+            .await;
+
+        Ok(dispatcher)
     }
 
     fn assert_error(
@@ -332,7 +371,7 @@ mod tests {
 
     #[tokio::test]
     async fn tools_list_advertises_the_run_wasm_tool() -> Result<(), Box<dyn std::error::Error>> {
-        let mut dispatcher = dispatcher()?;
+        let mut dispatcher = initialized().await?;
         let response = dispatcher.handle(request(3, "tools/list", None)).await;
 
         let JsonRpcResponse::Success { id, result, .. } = response else {
@@ -347,7 +386,7 @@ mod tests {
     #[tokio::test]
     async fn tools_call_with_unknown_tool_is_invalid_params()
     -> Result<(), Box<dyn std::error::Error>> {
-        let mut dispatcher = dispatcher()?;
+        let mut dispatcher = initialized().await?;
         let response = dispatcher
             .handle(request(
                 4,
@@ -361,7 +400,7 @@ mod tests {
 
     #[tokio::test]
     async fn run_wasm_executes_the_module() -> Result<(), Box<dyn std::error::Error>> {
-        let mut dispatcher = dispatcher()?;
+        let mut dispatcher = initialized().await?;
         let response = dispatcher
             .handle(request(
                 6,
@@ -384,7 +423,7 @@ mod tests {
 
     #[tokio::test]
     async fn run_wasm_reports_execution_failures() -> Result<(), Box<dyn std::error::Error>> {
-        let mut dispatcher = dispatcher()?;
+        let mut dispatcher = initialized().await?;
         let response = dispatcher
             .handle(request(
                 7,
@@ -412,7 +451,7 @@ mod tests {
     #[tokio::test]
     async fn run_wasm_with_invalid_arguments_is_invalid_params()
     -> Result<(), Box<dyn std::error::Error>> {
-        let mut dispatcher = dispatcher()?;
+        let mut dispatcher = initialized().await?;
         let response = dispatcher
             .handle(request(
                 8,
@@ -427,7 +466,7 @@ mod tests {
     #[tokio::test]
     async fn run_wasm_adapts_the_arguments_to_the_signature()
     -> Result<(), Box<dyn std::error::Error>> {
-        let mut dispatcher = dispatcher()?;
+        let mut dispatcher = initialized().await?;
         let response = dispatcher
             .handle(request(
                 12,
@@ -461,7 +500,7 @@ mod tests {
 
     #[tokio::test]
     async fn run_wasm_returns_the_guest_output() -> Result<(), Box<dyn std::error::Error>> {
-        let mut dispatcher = dispatcher()?;
+        let mut dispatcher = initialized().await?;
         let response = dispatcher
             .handle(request(
                 10,
@@ -487,7 +526,7 @@ mod tests {
         let wasm = wat::parse_str(ADD_MODULE).map_err(std::io::Error::other)?;
         let encoded = base64::engine::general_purpose::STANDARD.encode(&wasm);
 
-        let mut dispatcher = dispatcher()?;
+        let mut dispatcher = initialized().await?;
         let response = dispatcher
             .handle(request(
                 9,
@@ -507,8 +546,57 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unknown_method_is_method_not_found() -> Result<(), Box<dyn std::error::Error>> {
+    async fn initialize_answers_with_the_supported_version()
+    -> Result<(), Box<dyn std::error::Error>> {
         let mut dispatcher = dispatcher()?;
+        let response = dispatcher
+            .handle(request(
+                12,
+                "initialize",
+                Some(json!({
+                    "protocolVersion": "1999-01-01",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1.0"}
+                })),
+            ))
+            .await;
+
+        let JsonRpcResponse::Success { result, .. } = response else {
+            return Err("expected a success response".into());
+        };
+        assert_eq!(result["protocolVersion"], json!(SUPPORTED_PROTOCOL_VERSION));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn requests_before_initialize_are_refused() -> Result<(), Box<dyn std::error::Error>> {
+        let mut dispatcher = dispatcher()?;
+        let response = dispatcher.handle(request(13, "tools/list", None)).await;
+
+        assert_error(response, 13, INVALID_REQUEST, "server not initialized")
+    }
+
+    #[tokio::test]
+    async fn a_second_initialize_is_refused() -> Result<(), Box<dyn std::error::Error>> {
+        let mut dispatcher = initialized().await?;
+        let response = dispatcher
+            .handle(request(
+                14,
+                "initialize",
+                Some(json!({
+                    "protocolVersion": SUPPORTED_PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1.0"}
+                })),
+            ))
+            .await;
+
+        assert_error(response, 14, INVALID_REQUEST, "already initialized")
+    }
+
+    #[tokio::test]
+    async fn unknown_method_is_method_not_found() -> Result<(), Box<dyn std::error::Error>> {
+        let mut dispatcher = initialized().await?;
         let response = dispatcher.handle(request(5, "nope", None)).await;
 
         assert_error(response, 5, METHOD_NOT_FOUND, "method not found: nope")

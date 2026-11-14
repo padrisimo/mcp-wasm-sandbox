@@ -67,9 +67,17 @@ def url():
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    endpoint = f"http://127.0.0.1:{port}/mcp"
     try:
         wait_for(port, process)
-        yield f"http://127.0.0.1:{port}/mcp"
+        # The lifecycle requires the handshake before any other request.
+        status, _ = post(
+            endpoint,
+            '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2024-11-05",'
+            '"capabilities":{},"clientInfo":{"name":"pytest","version":"1.0"}}}',
+        )
+        assert status == 200
+        yield endpoint
     finally:
         process.terminate()
         process.wait(timeout=10)

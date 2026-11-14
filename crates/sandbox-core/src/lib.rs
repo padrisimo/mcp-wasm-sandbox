@@ -10,7 +10,8 @@ mod wasi;
 
 pub use cache::ModuleCache;
 pub use sandbox::{
-    DEFAULT_FUEL, DEFAULT_MAX_MEMORY_BYTES, Number, Sandbox, SandboxConfig, SandboxOutput,
+    DEFAULT_FUEL, DEFAULT_MAX_MEMORY_BYTES, DEFAULT_TIMEOUT, Number, Sandbox, SandboxConfig,
+    SandboxOutput,
 };
 
 /// Domain errors raised by the Wasm sandbox.
@@ -49,6 +50,12 @@ pub enum SandboxError {
     /// The WebAssembly engine could not be created.
     #[error("wasm engine error: {0}")]
     Engine(String),
+    /// The execution did not finish in time.
+    #[error("wasm execution timed out after {after:?}")]
+    Timeout {
+        /// The budget the execution exceeded.
+        after: std::time::Duration,
+    },
 }
 
 #[cfg(test)]
