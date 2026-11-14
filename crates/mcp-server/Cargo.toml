@@ -16,3 +16,4 @@ axum = { version = "0.7", features = ["tokio"] } # Opcional para SSE en Fase 1/2
 
 [dev-dependencies]
 wat.workspace = true
+tower = { version = "0.5", features = ["util"] }

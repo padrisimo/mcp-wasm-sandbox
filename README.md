@@ -7,7 +7,7 @@ Wasmtime sandbox with a hard fuel budget and a hard linear-memory ceiling.
 
 | Phase | Scope | State |
 | --- | --- | --- |
-| 1 | JSON-RPC 2.0 wire types, stdio transport, dispatcher | done |
+| 1 | JSON-RPC 2.0 wire types, stdio and HTTP transports, dispatcher | done |
 | 2 | Isolation runtime: fuel metering, memory ceiling, module cache | done |
 | 3 | Python bindings (`mcp_wasm_sandbox`) | done |
 | 4 | Benchmarks and CI | in progress: benchmarks and CI done, sub-process and container baselines missing |
@@ -52,17 +52,31 @@ blocks the interpreter.
 
 ```sh
 cargo build --release -p mcp-server
-./target/release/mcp-server
+./target/release/mcp-server                        # newline delimited json-rpc over stdio
+./target/release/mcp-server --http 127.0.0.1:3000  # json-rpc over http
 ```
 
-The server speaks newline-delimited JSON-RPC 2.0 over stdin and stdout and
-exposes one tool, `run_wasm`:
+Both transports speak the same protocol: the dispatcher is shared, only the
+bytes differ.
+
+Over stdio the server speaks newline-delimited JSON-RPC 2.0 on stdin and stdout
+and exposes one tool, `run_wasm`:
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"run_wasm","arguments":{"source":"(module (func (export \"add\") (param i32 i32) (result i32) local.get 0 local.get 1 i32.add))","export":"add","args":[2,3]}}}
 ```
 
 The response is `{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"5"}]}}`.
+
+Over HTTP the endpoint accepts a POST with one JSON-RPC message and answers
+with the response, `202 Accepted` for notifications and `400 Bad Request` for a
+body that is not a valid JSON-RPC message:
+
+```sh
+curl -s -X POST http://127.0.0.1:3000/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
 
 The module travels either as text (`source`, WebAssembly text format) or as a
 binary (`module_base64`, base64 encoded), which is what agents usually produce:

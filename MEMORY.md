@@ -25,6 +25,7 @@ The project uses a Cargo Workspace to split concerns cleanly (YAGNI enforcement)
 * Define `thiserror` domain models for sandbox anomalies (`SandboxError`, `McpWireError`).
 * Model base MCP lifecycle messages (`initialize`, `tools/list`, `tools/call`) using serde derives.
 * Implement asynchronous stream transport over standard input/output, with a minimal dispatcher and the `mcp-server` binary.
+* Serve the same protocol over HTTP (`--http <address>`), sharing the dispatcher with the stdio transport.
 
 ### Phase 2: Isolation Runtime [DONE]
 * Initialize Wasmtime global configuration engine (`consume_fuel`, threads disabled).

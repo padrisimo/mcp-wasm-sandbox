@@ -1,7 +1,12 @@
 //! Stdio entry point for the MCP server.
 
-use mcp_server::{Dispatcher, serve_stdio};
+use std::net::SocketAddr;
+
+use mcp_server::{Dispatcher, serve_http, serve_stdio};
 use sandbox_core::{Sandbox, SandboxConfig};
+
+/// Default address of the HTTP transport.
+const DEFAULT_HTTP_ADDRESS: &str = "127.0.0.1:3000";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -11,6 +16,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let sandbox = Sandbox::new(SandboxConfig::default())?;
-    serve_stdio(Dispatcher::new(sandbox)).await?;
+    let dispatcher = Dispatcher::new(sandbox);
+
+    let mut args = std::env::args().skip(1);
+    match args.next().as_deref() {
+        Some("--http") => {
+            let address: SocketAddr = args
+                .next()
+                .unwrap_or_else(|| DEFAULT_HTTP_ADDRESS.to_string())
+                .parse()?;
+            serve_http(address, dispatcher).await?;
+        }
+        _ => serve_stdio(dispatcher).await?,
+    }
+
     Ok(())
 }

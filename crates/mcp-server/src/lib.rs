@@ -9,11 +9,15 @@
 
 mod dispatcher;
 mod error;
+mod http;
+mod protocol;
 mod transport;
 
 pub use dispatcher::Dispatcher;
 pub use error::McpWireError;
-pub use transport::{RequestHandler, serve, serve_stdio};
+pub use http::{router, serve_http};
+pub use protocol::{Dispatched, RequestHandler, dispatch};
+pub use transport::{serve, serve_stdio};
 
 use sandbox_core::SandboxError;
 use serde::{Deserialize, Serialize};

@@ -1,23 +1,13 @@
 //! Newline-delimited JSON-RPC 2.0 over async byte streams.
 
-use std::future::Future;
-
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::error::McpWireError;
-use crate::{
-    INVALID_REQUEST, JSONRPC_VERSION, JsonRpcError, JsonRpcId, JsonRpcNotification, JsonRpcRequest,
-    JsonRpcResponse, PARSE_ERROR,
-};
+use crate::protocol::{Dispatched, dispatch, error_response};
+use crate::{INVALID_REQUEST, JsonRpcResponse, RequestHandler};
 
 /// Maximum accepted length of a single NDJSON line, in bytes.
 const MAX_LINE_BYTES: usize = 1024 * 1024;
-
-/// Handles one JSON-RPC request and returns the response to write.
-pub trait RequestHandler {
-    /// Handles a request. The returned response must echo the request id.
-    fn handle(&mut self, request: JsonRpcRequest) -> impl Future<Output = JsonRpcResponse>;
-}
 
 /// Serves JSON-RPC over `reader` and `writer` until EOF.
 pub async fn serve<R, W, H>(reader: R, mut writer: W, mut handler: H) -> Result<(), McpWireError>
@@ -45,7 +35,11 @@ where
         let line = match std::str::from_utf8(&line) {
             Ok(text) => text.trim(),
             Err(_) => {
-                write_response(&mut writer, error_response(PARSE_ERROR, "invalid JSON")).await?;
+                write_response(
+                    &mut writer,
+                    error_response(crate::PARSE_ERROR, "invalid JSON"),
+                )
+                .await?;
                 continue;
             }
         };
@@ -54,40 +48,11 @@ where
             continue;
         }
 
-        let value: serde_json::Value = match serde_json::from_str(line) {
-            Ok(value) => value,
-            Err(_) => {
-                write_response(&mut writer, error_response(PARSE_ERROR, "invalid JSON")).await?;
-                continue;
+        match dispatch(&mut handler, line).await {
+            Dispatched::Response(response) | Dispatched::Malformed(response) => {
+                write_response(&mut writer, response).await?
             }
-        };
-
-        if !value.is_object() {
-            write_response(
-                &mut writer,
-                error_response(INVALID_REQUEST, "invalid request"),
-            )
-            .await?;
-            continue;
-        }
-
-        if value.get("id").is_some() {
-            let request: JsonRpcRequest = match serde_json::from_value(value) {
-                Ok(request) => request,
-                Err(_) => {
-                    write_response(
-                        &mut writer,
-                        error_response(INVALID_REQUEST, "invalid request"),
-                    )
-                    .await?;
-                    continue;
-                }
-            };
-            let response = handler.handle(request).await;
-            write_response(&mut writer, response).await?;
-        } else if let Err(err) = serde_json::from_value::<JsonRpcNotification>(value) {
-            // Notifications are never answered; malformed ones are dropped with a warning.
-            tracing::warn!(%err, "dropping invalid notification");
+            Dispatched::Notification => {}
         }
     }
 
@@ -97,18 +62,6 @@ where
 /// Serves JSON-RPC over process stdin and stdout until EOF.
 pub async fn serve_stdio<H: RequestHandler>(handler: H) -> Result<(), McpWireError> {
     serve(tokio::io::stdin(), tokio::io::stdout(), handler).await
-}
-
-fn error_response(code: i64, message: &str) -> JsonRpcResponse {
-    JsonRpcResponse::Error {
-        jsonrpc: JSONRPC_VERSION.to_string(),
-        id: JsonRpcId::Null,
-        error: JsonRpcError {
-            code,
-            message: message.to_string(),
-            data: None,
-        },
-    }
 }
 
 async fn write_response<W: AsyncWrite + Unpin>(
@@ -184,6 +137,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::{JSONRPC_VERSION, JsonRpcRequest, PARSE_ERROR};
 
     struct CountingHandler {
         calls: Arc<AtomicUsize>,
