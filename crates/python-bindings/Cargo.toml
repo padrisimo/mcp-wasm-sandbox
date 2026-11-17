@@ -2,6 +2,7 @@
 name = "mcp-wasm-sandbox"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 name = "mcp_wasm_sandbox"

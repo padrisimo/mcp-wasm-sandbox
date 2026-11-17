@@ -1,5 +1,9 @@
 # mcp-wasm-sandbox
 
+[![CI](https://github.com/padrisimo/mcp-wasm-sandbox/actions/workflows/ci.yml/badge.svg)](https://github.com/padrisimo/mcp-wasm-sandbox/actions/workflows/ci.yml)
+[![version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fpadrisimo%2Fmcp-wasm-sandbox%2Fmain%2FCargo.toml&query=%24.workspace.package.version&label=version&color=blue)](https://github.com/padrisimo/mcp-wasm-sandbox/releases)
+[![rust](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fpadrisimo%2Fmcp-wasm-sandbox%2Fmain%2FCargo.toml&query=%24.workspace.package.rust-version&label=rust&color=dea584)](https://github.com/padrisimo/mcp-wasm-sandbox/blob/main/Cargo.toml)
+
 A Model Context Protocol (MCP) server that runs untrusted WebAssembly inside a
 Wasmtime sandbox with a hard fuel budget and a hard linear-memory ceiling.
 
@@ -10,14 +14,14 @@ Wasmtime sandbox with a hard fuel budget and a hard linear-memory ceiling.
 | 1 | JSON-RPC 2.0 wire types, stdio and HTTP transports, dispatcher | done |
 | 2 | Isolation runtime: fuel metering, memory ceiling, module cache | done |
 | 3 | Python bindings (`mcp_wasm_sandbox`) | done |
-| 4 | Benchmarks and CI | in progress: benchmarks and CI done, sub-process and container baselines missing |
+| 4 | Benchmarks and CI | done |
 
 Everything below is verified by the test suite and by the commands shown here.
 Nothing is published to PyPI yet; the wheel is built from this repository.
 
 ## Requirements
 
-- Rust 1.85 or newer (the workspace uses edition 2024).
+- Rust 1.97 or newer (the workspace uses edition 2024 and wasmtime 50).
 - Python 3.10 or newer, only for the bindings. The interpreter needs a shared
   `libpython` to build the bindings.
 

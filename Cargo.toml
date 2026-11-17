@@ -9,6 +9,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.97"
 authors = ["Adrian Fernandez Chamizo espinete@duck.org"]
 repository = "https://github.com/padrisimo/mcp-wasm-sandbox"
 
