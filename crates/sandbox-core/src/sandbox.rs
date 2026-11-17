@@ -2,7 +2,7 @@
 
 use wasmtime::{Engine, Linker, Module, Store, Val, ValType};
 use wasmtime_wasi::I32Exit;
-use wasmtime_wasi::preview1;
+use wasmtime_wasi::p1;
 
 use crate::SandboxError;
 use crate::cache::ModuleCache;
@@ -122,7 +122,7 @@ struct StoreState {
 
 impl StoreState {
     /// The WASI context of the guest, without any host access.
-    fn wasi_ctx(&mut self) -> &mut wasmtime_wasi::preview1::WasiP1Ctx {
+    fn wasi_ctx(&mut self) -> &mut wasmtime_wasi::p1::WasiP1Ctx {
         self.wasi.ctx()
     }
 }
@@ -147,9 +147,9 @@ impl wasmtime::ResourceLimiter for StoreState {
 
     fn table_growing(
         &mut self,
-        _current: u32,
-        _desired: u32,
-        _maximum: Option<u32>,
+        _current: usize,
+        _desired: usize,
+        _maximum: Option<usize>,
     ) -> Result<bool, wasmtime::Error> {
         Ok(true)
     }
@@ -288,7 +288,7 @@ fn run(
         .map_err(|err| SandboxError::Execution(err.to_string()))?;
 
     let mut linker = Linker::new(engine);
-    preview1::add_to_linker_sync(&mut linker, |state: &mut StoreState| state.wasi_ctx())
+    p1::add_to_linker_sync(&mut linker, |state: &mut StoreState| state.wasi_ctx())
         .map_err(|err| SandboxError::Execution(err.to_string()))?;
 
     let instance = linker

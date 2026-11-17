@@ -5,12 +5,14 @@
 //! inherited streams. Everything written to stdout or stderr is captured and
 //! returned to the caller.
 
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 
-use bytes::Bytes;
-use wasmtime_wasi::async_trait;
-use wasmtime_wasi::preview1::WasiP1Ctx;
-use wasmtime_wasi::{HostOutputStream, StdoutStream, StreamResult, Subscribe, WasiCtxBuilder};
+use tokio::io::AsyncWrite;
+use wasmtime_wasi::WasiCtxBuilder;
+use wasmtime_wasi::cli::{IsTerminal, StdoutStream};
+use wasmtime_wasi::p1::WasiP1Ctx;
 
 /// Collects everything the guest writes to stdout or stderr.
 #[derive(Clone, Default)]
@@ -26,38 +28,42 @@ impl CapturedOutput {
     }
 }
 
-impl StdoutStream for CapturedOutput {
-    fn stream(&self) -> Box<dyn HostOutputStream> {
-        Box::new(CapturedStream(self.0.clone()))
-    }
-
-    fn isatty(&self) -> bool {
+impl IsTerminal for CapturedOutput {
+    fn is_terminal(&self) -> bool {
         false
+    }
+}
+
+impl StdoutStream for CapturedOutput {
+    fn async_stream(&self) -> Box<dyn AsyncWrite + Send + Sync> {
+        Box::new(CapturedStream(self.0.clone()))
     }
 }
 
 /// A stream that appends to the shared capture buffer.
 struct CapturedStream(Arc<Mutex<Vec<u8>>>);
 
-#[async_trait]
-impl Subscribe for CapturedStream {
-    async fn ready(&mut self) {}
-}
-
-impl HostOutputStream for CapturedStream {
-    fn write(&mut self, bytes: Bytes) -> StreamResult<()> {
-        if let Ok(mut buffer) = self.0.lock() {
-            buffer.extend_from_slice(bytes.as_ref());
+impl AsyncWrite for CapturedStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        match self.0.lock() {
+            Ok(mut buffer) => {
+                buffer.extend_from_slice(buf);
+                Poll::Ready(Ok(buf.len()))
+            }
+            Err(_) => Poll::Ready(Err(std::io::Error::other("captured output is poisoned"))),
         }
-        Ok(())
     }
 
-    fn flush(&mut self) -> StreamResult<()> {
-        Ok(())
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Poll::Ready(Ok(()))
     }
 
-    fn check_write(&mut self) -> StreamResult<usize> {
-        Ok(usize::MAX)
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Poll::Ready(Ok(()))
     }
 }
 
