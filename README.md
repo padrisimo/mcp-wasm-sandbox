@@ -53,6 +53,10 @@ sandbox.run(WAT, "add", [2, 3])  # -> [5]
 fuel budget. The GIL is released while the module runs, so a long module never
 blocks the interpreter.
 
+The guest output is exposed with `WasmSandbox.run_with_output(wasm, export,
+args)`, which returns the results together with everything the guest wrote to
+stdout or stderr. `WasmSandbox.run` returns only the results.
+
 ### MCP server
 
 ```sh
