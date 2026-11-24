@@ -19,17 +19,34 @@ const RUN_WASM_TOOL: &str = "run_wasm";
 const INVALID_RUN_WASM_ARGS: &str = "invalid run_wasm arguments";
 
 /// Routes MCP lifecycle methods to their responses.
+#[derive(Clone)]
 pub struct Dispatcher {
     sandbox: Sandbox,
     initialized: bool,
+    /// A transport without sessions has nowhere to keep the handshake, so it
+    /// cannot enforce the lifecycle.
+    enforce_lifecycle: bool,
 }
 
 impl Dispatcher {
     /// Builds a dispatcher that runs guest code inside `sandbox`.
+    ///
+    /// The lifecycle is enforced: the client must `initialize` first.
     pub fn new(sandbox: Sandbox) -> Self {
         Self {
             sandbox,
             initialized: false,
+            enforce_lifecycle: true,
+        }
+    }
+
+    /// Builds a dispatcher for a transport that carries no session, such as a
+    /// stateless HTTP endpoint where every request stands alone.
+    pub fn stateless(sandbox: Sandbox) -> Self {
+        Self {
+            sandbox,
+            initialized: false,
+            enforce_lifecycle: false,
         }
     }
 }
@@ -41,13 +58,14 @@ impl RequestHandler for Dispatcher {
         } = request;
 
         // Only `initialize` and `ping` are allowed before the handshake.
-        if !self.initialized && method != "initialize" && method != "ping" {
+        if self.enforce_lifecycle && !self.initialized && method != "initialize" && method != "ping"
+        {
             return error(id, INVALID_REQUEST, "server not initialized");
         }
 
         match method.as_str() {
             "initialize" => {
-                if self.initialized {
+                if self.enforce_lifecycle && self.initialized {
                     return error(id, INVALID_REQUEST, "already initialized");
                 }
 
@@ -495,6 +513,41 @@ mod tests {
         };
         assert_eq!(id, JsonRpcId::Number(11));
         assert_eq!(result, json!({}));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_stateless_dispatcher_answers_before_initialize()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut dispatcher = Dispatcher::stateless(Sandbox::new(SandboxConfig::default())?);
+        let response = dispatcher.handle(request(15, "tools/list", None)).await;
+
+        let JsonRpcResponse::Success { result, .. } = response else {
+            return Err("expected a success response".into());
+        };
+        assert_eq!(result["tools"][0]["name"], json!("run_wasm"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_stateless_dispatcher_accepts_a_second_initialize()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut dispatcher = Dispatcher::stateless(Sandbox::new(SandboxConfig::default())?);
+        let params = Some(json!({
+            "protocolVersion": SUPPORTED_PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "1.0"}
+        }));
+
+        dispatcher
+            .handle(request(16, "initialize", params.clone()))
+            .await;
+        let response = dispatcher.handle(request(17, "initialize", params)).await;
+
+        let JsonRpcResponse::Success { id, .. } = response else {
+            return Err("expected a success response".into());
+        };
+        assert_eq!(id, JsonRpcId::Number(17));
         Ok(())
     }
 

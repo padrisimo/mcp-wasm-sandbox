@@ -15,19 +15,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_writer(std::io::stderr)
         .init();
 
-    let sandbox = Sandbox::new(SandboxConfig::default())?;
-    let dispatcher = Dispatcher::new(sandbox);
-
+    let mut config = SandboxConfig::default();
+    let mut http = None;
     let mut args = std::env::args().skip(1);
-    match args.next().as_deref() {
-        Some("--http") => {
-            let address: SocketAddr = args
-                .next()
-                .unwrap_or_else(|| DEFAULT_HTTP_ADDRESS.to_string())
-                .parse()?;
-            serve_http(address, dispatcher).await?;
+
+    while let Some(argument) = args.next() {
+        match argument.as_str() {
+            "--http" => {
+                let address = args
+                    .next()
+                    .unwrap_or_else(|| DEFAULT_HTTP_ADDRESS.to_string());
+                http = Some(address.parse::<SocketAddr>()?);
+            }
+            "--fuel" => {
+                config.fuel = args
+                    .next()
+                    .ok_or("--fuel needs a value")?
+                    .parse()
+                    .map_err(|_| "--fuel needs a whole number of units")?;
+            }
+            other => return Err(format!("unknown argument: {other}").into()),
         }
-        _ => serve_stdio(dispatcher).await?,
+    }
+
+    let sandbox = Sandbox::new(config)?;
+
+    match http {
+        // The HTTP transport has no session, so it builds a handler per request.
+        Some(address) => {
+            serve_http(address, move || Dispatcher::stateless(sandbox.clone())).await?
+        }
+        None => serve_stdio(Dispatcher::new(sandbox)).await?,
     }
 
     Ok(())

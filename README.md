@@ -44,7 +44,7 @@ import mcp_wasm_sandbox
 
 WAT = b'(module (func (export "add") (param i32 i32) (result i32) local.get 0 local.get 1 i32.add))'
 
-sandbox = mcp_wasm_sandbox.WasmSandbox(32 * 1024 * 1024, 10_000_000)
+sandbox = mcp_wasm_sandbox.WasmSandbox(32 * 1024 * 1024, 1_000_000_000)
 sandbox.run(WAT, "add", [2, 3])  # -> [5]
 ```
 
@@ -58,10 +58,19 @@ blocks the interpreter.
 cargo build --release -p mcp-server
 ./target/release/mcp-server                        # newline delimited json-rpc over stdio
 ./target/release/mcp-server --http 127.0.0.1:3000  # json-rpc over http
+./target/release/mcp-server --fuel 5000000000      # raise the fuel budget
 ```
 
-Both transports speak the same protocol: the dispatcher is shared, only the
-bytes differ.
+Both transports speak the same protocol: the same dispatcher answers, only the
+bytes differ. The stdio transport is one session per process and enforces the
+MCP lifecycle (the client must `initialize` first, `ping` excepted). The HTTP
+transport has no session, so every request stands alone: it builds a fresh
+dispatcher per request, does not enforce the lifecycle, and one slow call never
+blocks another client.
+
+The default fuel budget is `1_000_000_000` units, roughly a second of guest
+CPU. Fuel is counted in wasm instructions, so a module doing real work may need
+more: `--fuel` sets it per process, and `SandboxConfig::fuel` per sandbox.
 
 Over stdio the server speaks newline-delimited JSON-RPC 2.0 on stdin and stdout
 and exposes one tool, `run_wasm`:
@@ -150,8 +159,12 @@ below the 1 ms target of the architecture.
   guest writes to stdout or stderr comes back in the tool result.
 - The tool arguments are numbers; the guest decides their type, since the
   sandbox adapts them to the signature of the exported function.
-- The module cache grows without bound and is not shared between processes.
-- One request is handled at a time; there is no pipelining.
+- The module cache holds at most 64 modules and is not shared between processes.
+- Stdio handles one request at a time; the HTTP transport runs requests
+  concurrently.
+- The wall-clock timeout stops the caller from waiting, not the guest: a call
+  that times out keeps its blocking thread until the fuel budget ends it. Fuel
+  is the real bound.
 
 ## License
 

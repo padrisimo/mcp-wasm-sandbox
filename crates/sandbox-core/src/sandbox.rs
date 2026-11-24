@@ -12,7 +12,15 @@ use crate::wasi::WasiState;
 pub const DEFAULT_MAX_MEMORY_BYTES: usize = 32 * 1024 * 1024;
 
 /// Default fuel budget granted to a single execution.
-pub const DEFAULT_FUEL: u64 = 10_000_000;
+///
+/// Fuel is counted in wasm instructions and burnt at an order of magnitude of a
+/// billion units per second, so this is roughly a second of guest CPU. The
+/// wall-clock timeout sits above it because the timeout also covers
+/// compilation, which fuel does not meter.
+///
+/// shortcut: an order of magnitude, not a calibration; raise `fuel` (or
+/// `--fuel`) when a module doing legitimate work exhausts it.
+pub const DEFAULT_FUEL: u64 = 1_000_000_000;
 
 /// Default wall-clock budget of a single execution.
 pub const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
