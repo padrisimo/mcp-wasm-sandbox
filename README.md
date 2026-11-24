@@ -1,8 +1,11 @@
 # mcp-wasm-sandbox
 
 [![CI](https://github.com/padrisimo/mcp-wasm-sandbox/actions/workflows/ci.yml/badge.svg)](https://github.com/padrisimo/mcp-wasm-sandbox/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/mcp-wasm-sandbox.svg)](https://pypi.org/project/mcp-wasm-sandbox/)
 [![version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fpadrisimo%2Fmcp-wasm-sandbox%2Fmain%2FCargo.toml&query=%24.workspace.package.version&label=version&color=blue)](https://github.com/padrisimo/mcp-wasm-sandbox/releases)
 [![rust](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fpadrisimo%2Fmcp-wasm-sandbox%2Fmain%2FCargo.toml&query=%24.workspace.package.rust-version&label=rust&color=dea584)](https://github.com/padrisimo/mcp-wasm-sandbox/blob/main/Cargo.toml)
+[![wasmtime](https://img.shields.io/badge/wasmtime-50-orange.svg)](https://wasmtime.dev/)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
 A Model Context Protocol (MCP) server that runs untrusted WebAssembly inside a
 Wasmtime sandbox with a hard fuel budget and a hard linear-memory ceiling.
@@ -155,14 +158,9 @@ distributions, p50, p95 and p99 included, under `target/criterion`.
 The container baseline is skipped unless the image is built first
 (`docker build -t mcp-wasm-sandbox:bench .`).
 
-The same work costs 6.6 µs in process, 2.5 ms behind a sub-process and 178 ms
-inside a container: roughly 375 times and 27,000 times more expensive. A cached
-execution stays two orders of magnitude below the 1 ms target of the
-architecture.
-
-Measured on an Apple Silicon laptop. A cached execution is roughly 375 times
-faster than the same work behind a sub-process, and two orders of magnitude
-below the 1 ms target of the architecture.
+Measured on an Apple Silicon laptop: a cached execution is roughly 375 times
+faster than the same work behind a sub-process and two orders of magnitude below
+the 1 ms target of the architecture.
 
 ## Known limitations
 
