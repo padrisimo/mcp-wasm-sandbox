@@ -104,7 +104,10 @@ fn run_with(
         })
         .collect::<Result<Vec<i32>, String>>()?;
 
-    Ok((results, String::from_utf8_lossy(&output.stdout).into_owned()))
+    Ok((
+        results,
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+    ))
 }
 
 /// The `mcp_wasm_sandbox` extension module.
@@ -118,7 +121,7 @@ fn mcp_wasm_sandbox(module: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
     use pyo3::Python;
 
-    use super::{run_sandbox, run_with, Sandbox, SandboxConfig, Number};
+    use super::{Sandbox, SandboxConfig, run_sandbox, run_with};
 
     const ADD_MODULE: &str = r#"(module
         (func (export "add") (param i32 i32) (result i32)

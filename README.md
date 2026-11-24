@@ -15,6 +15,7 @@ Wasmtime sandbox with a hard fuel budget and a hard linear-memory ceiling.
 | 2 | Isolation runtime: fuel metering, memory ceiling, module cache | done |
 | 3 | Python bindings (`mcp_wasm_sandbox`) | done |
 | 4 | Benchmarks and CI | done |
+| 5 | Hardening, observability and supply chain | done |
 
 Everything below is verified by the test suite and by the commands shown here.
 Nothing is published to PyPI yet; the wheel is built from this repository.

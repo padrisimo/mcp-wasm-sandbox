@@ -43,3 +43,12 @@ The project uses a Cargo Workspace to split concerns cleanly (YAGNI enforcement)
 * Author a performance testing suite using `criterion` (`cargo bench -p sandbox-core`: compile ~98 µs, instantiate ~1.3 µs, cached call ~6.6 µs).
 * Graph p50/p95/p99 latency footprints vs sub-processes and containers (sub-process round trip ~2.5 ms, container round trip ~178 ms, both through the same MCP server).
 * Configure automated GitHub workflows for workspace linting (`clippy`) and testing (`.github/workflows/ci.yml`, green on every push).
+
+### Phase 5: Hardening, Observability & Supply Chain [DONE]
+* Bound every sandbox execution with a wall-clock timeout (`SandboxError::Timeout`, default 5 s) on top of the fuel and memory limits; fuel is the real bound, the timeout also covers compilation.
+* Enforce the MCP lifecycle (`initialize` answers with the supported version, everything but `ping` is refused before the handshake, a second `initialize` is refused) and allow a stateless HTTP transport.
+* Log every tool call (duration, fuel used, outcome) and warn when the HTTP transport binds a non loopback address.
+* Expose the guest output through `WasmSandbox.run_with_output`.
+* `cargo audit` green on every push; criterion benchmarks run nightly and upload the report.
+* Bumped `wasmtime` to 50 to close critical advisories, including a guest heap escape on aarch64 Cranelift.
+* Raised the default fuel budget to `1_000_000_000` units (about a second of guest CPU) and exposed it as `--fuel`.
