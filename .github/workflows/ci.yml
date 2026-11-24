@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 8 * * 0"
 
 jobs:
   rust:
@@ -30,6 +32,14 @@ jobs:
 
       - name: Benchmarks compile
         run: cargo bench --workspace --exclude mcp-wasm-sandbox --no-run
+
+      - name: Audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: Audit the dependency tree
+        run: cargo audit
 
   python:
     runs-on: ubuntu-latest
@@ -76,3 +86,23 @@ jobs:
         run: |
           pip install pytest
           pytest tests -q
+
+  benchmarks:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run the benchmarks
+        run: cargo bench -p sandbox-core
+
+      - name: Upload the report
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-report
+          path: target/criterion
+          if-no-files-found: ignore
