@@ -4,8 +4,9 @@ build-backend = "maturin"
 
 [project]
 name = "mcp-wasm-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 description = "Model Context Protocol server that runs untrusted WebAssembly inside a Wasmtime sandbox."
+readme = { file = "../../README.md", content-type = "text/markdown" }
 license = { text = "MIT" }
 authors = [
     { name = "Adrian Fernandez Chamizo espinete@duck.org" },
@@ -16,6 +17,11 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: 3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/padrisimo/mcp-wasm-sandbox"
+Repository = "https://github.com/padrisimo/mcp-wasm-sandbox"
+Issues = "https://github.com/padrisimo/mcp-wasm-sandbox/issues"
 
 [tool.maturin]
 module-name = "mcp_wasm_sandbox"

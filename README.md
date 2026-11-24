@@ -21,7 +21,7 @@ Wasmtime sandbox with a hard fuel budget and a hard linear-memory ceiling.
 | 5 | Hardening, observability and supply chain | done |
 
 Everything below is verified by the test suite and by the commands shown here.
-Version 0.1.0 of the Python bindings is published on PyPI; the first wheel is
+Version 0.1.1 of the Python bindings is published on PyPI; the first wheel is
 for CPython 3.12 on macOS arm64. Build from source for other platforms.
 
 ## Requirements
@@ -35,7 +35,7 @@ for CPython 3.12 on macOS arm64. Build from source for other platforms.
 ### Python bindings
 
 ```sh
-pip install mcp-wasm-sandbox==0.1.0
+pip install mcp-wasm-sandbox==0.1.1
 ```
 
 To build from source instead:
@@ -178,4 +178,4 @@ the 1 ms target of the architecture.
 
 ## License
 
-MIT, see [LICENSE.md](LICENSE.md).
+MIT, see [LICENSE.md](https://github.com/padrisimo/mcp-wasm-sandbox/blob/main/LICENSE.md).

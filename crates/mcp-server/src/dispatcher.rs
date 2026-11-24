@@ -390,7 +390,7 @@ mod tests {
         assert_eq!(result["protocolVersion"], json!("2024-11-05"));
         assert_eq!(result["capabilities"], json!({"tools": {}}));
         assert_eq!(result["serverInfo"]["name"], json!("mcp-server"));
-        assert_eq!(result["serverInfo"]["version"], json!("0.1.0"));
+        assert_eq!(result["serverInfo"]["version"], json!("0.1.1"));
         Ok(())
     }
 

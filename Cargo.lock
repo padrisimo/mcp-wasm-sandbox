@@ -1182,7 +1182,7 @@ checksum = "0e7465ac9959cc2b1404e8e2367b43684a6d13790fe23056cc8c6c5a6b7bcb94"
 
 [[package]]
 name = "mcp-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "base64",
@@ -1199,7 +1199,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-wasm-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pyo3",
  "sandbox-core",
@@ -1637,7 +1637,7 @@ dependencies = [
 
 [[package]]
 name = "sandbox-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "thiserror 1.0.69",
