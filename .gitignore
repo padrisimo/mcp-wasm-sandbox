@@ -20,5 +20,3 @@ node_modules/
 .opencode/
 .claude/
 
-# Superpowers generated docs
-docs/superpowers/
