@@ -44,6 +44,12 @@ where
     let listener = tokio::net::TcpListener::bind(address).await?;
     let address = listener.local_addr()?;
     tracing::info!(%address, "serving json-rpc over http");
+    if !address.ip().is_loopback() {
+        tracing::warn!(
+            %address,
+            "the http transport binds to a non loopback address, which exposes the server to other clients"
+        );
+    }
 
     axum::serve(listener, router(make).into_make_service()).await?;
 

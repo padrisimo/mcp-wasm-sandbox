@@ -119,12 +119,22 @@ impl Dispatcher {
         let module = parsed.module()?;
         let numbers = parsed.numbers()?;
 
-        match self
+        let started = std::time::Instant::now();
+        let outcome = self
             .sandbox
             .call_with_output(&module, &parsed.export, &numbers)
-            .await
-        {
+            .await;
+        let duration_ms = started.elapsed().as_millis() as u64;
+
+        match outcome {
             Ok(output) => {
+                tracing::info!(
+                    tool = RUN_WASM_TOOL,
+                    duration_ms = duration_ms,
+                    fuel_used = output.fuel_used,
+                    outcome = "ok",
+                    "tool call finished",
+                );
                 let mut content = Vec::new();
                 if !output.stdout.is_empty() {
                     content.push(Content::Text {
@@ -141,12 +151,20 @@ impl Dispatcher {
                     is_error: None,
                 })
             }
-            Err(err) => Ok(ToolsCallResult {
-                content: vec![Content::Text {
-                    text: err.to_string(),
-                }],
-                is_error: Some(true),
-            }),
+            Err(err) => {
+                tracing::info!(
+                    tool = RUN_WASM_TOOL,
+                    duration_ms = duration_ms,
+                    outcome = "error",
+                    "tool call finished",
+                );
+                Ok(ToolsCallResult {
+                    content: vec![Content::Text {
+                        text: err.to_string(),
+                    }],
+                    is_error: Some(true),
+                })
+            }
         }
     }
 }
